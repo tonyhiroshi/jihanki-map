@@ -115,7 +115,8 @@
   .photo-viewer.show{display:flex;}
   .photo-viewer img{
     max-width:100%;max-height:100%;object-fit:contain;
-    touch-action:pinch-zoom;
+    touch-action:none;transform-origin:center center;will-change:transform;
+    user-select:none;-webkit-user-drag:none;
   }
   .photo-viewer-close{
     position:absolute;top:14px;right:16px;width:40px;height:40px;border-radius:50%;
@@ -1033,16 +1034,69 @@ function closeDetail(){
   detailMachine = null;
 }
 
-// 全画面写真ビューア
+// 全画面写真ビューア（ピンチで拡大／一本指でパン／ダブルタップでリセット）
+let pvScale = 1, pvTx = 0, pvTy = 0;
+let pvPanStart = null, pvPinch = null, pvLastTap = 0;
+const pvImgEl = document.getElementById('photoViewerImg');
+
+function pvApply(){ pvImgEl.style.transform = `translate(${pvTx}px,${pvTy}px) scale(${pvScale})`; }
+function pvReset(){ pvScale = 1; pvTx = 0; pvTy = 0; pvImgEl.style.transform = ''; }
+function pvDist(a, b){ return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY); }
+
 function openPhotoViewer(src){
   if(!src) return;
-  document.getElementById('photoViewerImg').src = src;
+  pvReset();
+  pvImgEl.src = src;
   document.getElementById('photoViewer').classList.add('show');
 }
 function closePhotoViewer(){
   document.getElementById('photoViewer').classList.remove('show');
-  document.getElementById('photoViewerImg').src = '';
+  pvImgEl.src = '';
+  pvReset();
 }
+
+pvImgEl.addEventListener('touchstart', (e) => {
+  if(e.touches.length === 1){
+    // ダブルタップ判定
+    const now = Date.now();
+    if(now - pvLastTap < 300){
+      pvScale > 1 ? pvReset() : (pvScale = 2.2, pvApply());
+      pvLastTap = 0;
+    } else {
+      pvLastTap = now;
+    }
+    pvPanStart = { x: e.touches[0].clientX - pvTx, y: e.touches[0].clientY - pvTy };
+    pvPinch = null;
+  } else if(e.touches.length === 2){
+    pvPinch = { d: pvDist(e.touches[0], e.touches[1]), scale: pvScale };
+    pvPanStart = null;
+  }
+}, {passive:false});
+
+pvImgEl.addEventListener('touchmove', (e) => {
+  if(e.touches.length === 1 && pvPanStart && pvScale > 1){
+    e.preventDefault();
+    pvTx = e.touches[0].clientX - pvPanStart.x;
+    pvTy = e.touches[0].clientY - pvPanStart.y;
+    pvApply();
+  } else if(e.touches.length === 2 && pvPinch){
+    e.preventDefault();
+    const d = pvDist(e.touches[0], e.touches[1]);
+    pvScale = Math.max(1, Math.min(pvPinch.scale * (d / pvPinch.d), 5));
+    pvApply();
+  }
+}, {passive:false});
+
+pvImgEl.addEventListener('touchend', (e) => {
+  if(pvScale <= 1.01){ pvReset(); }
+  if(e.touches.length === 1){
+    pvPanStart = { x: e.touches[0].clientX - pvTx, y: e.touches[0].clientY - pvTy };
+    pvPinch = null;
+  } else if(e.touches.length === 0){
+    pvPanStart = null; pvPinch = null;
+  }
+});
+
 document.getElementById('photoViewerClose').addEventListener('click', closePhotoViewer);
 document.getElementById('photoViewer').addEventListener('click', (e) => {
   if(e.target.id === 'photoViewer') closePhotoViewer();
