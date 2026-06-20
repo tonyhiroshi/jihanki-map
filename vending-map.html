@@ -350,7 +350,14 @@ function loadLocal(){
   try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }catch(e){ return []; }
 }
 function saveLocal(list){
-  localStorage.setItem(LS_KEY, JSON.stringify(list));
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify(list));
+  }catch(e){
+    if(e.name === 'QuotaExceededError' || e.code === 22){
+      throw new Error('ストレージ容量が不足しています。不要なデータを削除してください');
+    }
+    throw e;
+  }
 }
 
 function initFirebase(){
@@ -872,7 +879,7 @@ async function saveSheet(continueNext){
     }
   }catch(e){
     console.error(e);
-    showToast("保存に失敗しました（通信/Firestoreルールをご確認ください）");
+    showToast("保存に失敗: " + (e.message || e));
   }finally{
     saveBtn.disabled = false;
     contBtn.disabled = false;
