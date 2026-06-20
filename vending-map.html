@@ -545,79 +545,112 @@ function escapeHtml(s){
 
 function readExifGPS(file){
   return new Promise((resolve)=>{
+    const slice = file.slice(0, 131072);
     const reader = new FileReader();
     reader.onload = (e)=>{
       try{
         const buf = new DataView(e.target.result);
-        if(buf.getUint16(0) !== 0xFFD8){ resolve(null); return; }
+        if(buf.byteLength < 14 || buf.getUint16(0) !== 0xFFD8){
+          resolve(null); return;
+        }
         let offset = 2;
-        while(offset < buf.byteLength - 1){
+        while(offset + 4 < buf.byteLength){
+          if(buf.getUint8(offset) !== 0xFF){ offset++; continue; }
           const marker = buf.getUint16(offset);
-          if(marker === 0xFFE1){ // APP1 (EXIF)
-            const exif = parseExif(buf, offset + 4);
-            resolve(exif);
-            return;
+          if(marker === 0xFFDA) break;
+          if(marker === 0xFFD9) break;
+          if(offset + 4 >= buf.byteLength) break;
+          const segLen = buf.getUint16(offset + 2);
+          if(marker === 0xFFE1){
+            const result = parseExifSegment(buf, offset + 4, segLen - 2);
+            if(result){ resolve(result); return; }
           }
-          if((marker & 0xFF00) !== 0xFF00) break;
-          offset += 2 + buf.getUint16(offset + 2);
+          offset += 2 + segLen;
         }
         resolve(null);
-      }catch(ex){ resolve(null); }
+      }catch(ex){
+        console.warn('EXIF parse error:', ex);
+        resolve(null);
+      }
     };
     reader.onerror = ()=> resolve(null);
-    reader.readAsArrayBuffer(file);
+    reader.readAsArrayBuffer(slice);
   });
 }
 
-function parseExif(buf, start){
-  const exifStr = [0x45,0x78,0x69,0x66,0x00,0x00];
-  for(let i=0;i<6;i++) if(buf.getUint8(start+i)!==exifStr[i]) return null;
-  const tiffStart = start + 6;
-  const le = buf.getUint16(tiffStart) === 0x4949;
-  const g = (o,fn)=> buf[fn](tiffStart+o, le);
-  const ifdOffset = g(4,'getUint32');
-  const gpsIfdPointer = findTag(buf, tiffStart, ifdOffset, 0x8825, le);
-  if(!gpsIfdPointer) return null;
-  const gpsOffset = buf.getUint32(tiffStart + gpsIfdPointer + 8, le);
-  return readGPSIfd(buf, tiffStart, gpsOffset, le);
+function parseExifSegment(buf, start, len){
+  if(start + 6 >= buf.byteLength) return null;
+  if(buf.getUint8(start)!==0x45||buf.getUint8(start+1)!==0x78||
+     buf.getUint8(start+2)!==0x69||buf.getUint8(start+3)!==0x66||
+     buf.getUint8(start+4)!==0x00||buf.getUint8(start+5)!==0x00) return null;
+  const tiff = start + 6;
+  if(tiff + 8 >= buf.byteLength) return null;
+  const le = buf.getUint16(tiff) === 0x4949;
+  const ifd0off = buf.getUint32(tiff + 4, le);
+  let gpsOff = findTagValue(buf, tiff, ifd0off, 0x8825, le);
+  if(gpsOff === null){
+    const nextIfd = getNextIfd(buf, tiff, ifd0off, le);
+    if(nextIfd) gpsOff = findTagValue(buf, tiff, nextIfd, 0x8825, le);
+  }
+  if(gpsOff === null) return null;
+  return readGPSData(buf, tiff, gpsOff, le);
 }
 
-function findTag(buf, base, ifdOff, tag, le){
-  const count = buf.getUint16(base+ifdOff, le);
-  for(let i=0;i<count;i++){
-    const entryOff = ifdOff + 2 + i*12;
-    if(buf.getUint16(base+entryOff, le) === tag) return entryOff;
+function findTagValue(buf, tiff, ifdOff, targetTag, le){
+  if(tiff + ifdOff + 2 >= buf.byteLength) return null;
+  const count = buf.getUint16(tiff + ifdOff, le);
+  for(let i = 0; i < count; i++){
+    const entry = ifdOff + 2 + i * 12;
+    if(tiff + entry + 12 > buf.byteLength) return null;
+    const tag = buf.getUint16(tiff + entry, le);
+    if(tag === targetTag){
+      return buf.getUint32(tiff + entry + 8, le);
+    }
   }
   return null;
 }
 
-function readGPSIfd(buf, base, ifdOff, le){
-  const count = buf.getUint16(base+ifdOff, le);
-  let latRef='N', lonRef='E', latVals=null, lonVals=null;
-  for(let i=0;i<count;i++){
-    const off = ifdOff + 2 + i*12;
-    const tag = buf.getUint16(base+off, le);
-    if(tag===1) latRef = String.fromCharCode(buf.getUint8(base+off+8));
-    if(tag===3) lonRef = String.fromCharCode(buf.getUint8(base+off+8));
-    if(tag===2) latVals = readRationals(buf, base, off, le);
-    if(tag===4) lonVals = readRationals(buf, base, off, le);
+function getNextIfd(buf, tiff, ifdOff, le){
+  if(tiff + ifdOff + 2 >= buf.byteLength) return null;
+  const count = buf.getUint16(tiff + ifdOff, le);
+  const nextPos = ifdOff + 2 + count * 12;
+  if(tiff + nextPos + 4 > buf.byteLength) return null;
+  const next = buf.getUint32(tiff + nextPos, le);
+  return next > 0 ? next : null;
+}
+
+function readGPSData(buf, tiff, gpsOff, le){
+  if(tiff + gpsOff + 2 >= buf.byteLength) return null;
+  const count = buf.getUint16(tiff + gpsOff, le);
+  let latRef = 'N', lonRef = 'E', latVals = null, lonVals = null;
+  for(let i = 0; i < count; i++){
+    const entry = gpsOff + 2 + i * 12;
+    if(tiff + entry + 12 > buf.byteLength) break;
+    const tag = buf.getUint16(tiff + entry, le);
+    const type = buf.getUint16(tiff + entry + 2, le);
+    const cnt = buf.getUint32(tiff + entry + 4, le);
+    if(tag === 1) latRef = String.fromCharCode(buf.getUint8(tiff + entry + 8));
+    if(tag === 3) lonRef = String.fromCharCode(buf.getUint8(tiff + entry + 8));
+    if(tag === 2 && type === 5 && cnt === 3) latVals = readRat3(buf, tiff, entry, le);
+    if(tag === 4 && type === 5 && cnt === 3) lonVals = readRat3(buf, tiff, entry, le);
   }
   if(!latVals || !lonVals) return null;
-  let lat = latVals[0] + latVals[1]/60 + latVals[2]/3600;
-  let lon = lonVals[0] + lonVals[1]/60 + lonVals[2]/3600;
-  if(latRef==='S') lat = -lat;
-  if(lonRef==='W') lon = -lon;
-  if(lat===0 && lon===0) return null;
+  let lat = latVals[0] + latVals[1] / 60 + latVals[2] / 3600;
+  let lon = lonVals[0] + lonVals[1] / 60 + lonVals[2] / 3600;
+  if(latRef === 'S') lat = -lat;
+  if(lonRef === 'W') lon = -lon;
+  if(lat === 0 && lon === 0) return null;
   return { lat, lon };
 }
 
-function readRationals(buf, base, entryOff, le){
-  const valOffset = buf.getUint32(base+entryOff+8, le);
+function readRat3(buf, tiff, entryOff, le){
+  const valOff = buf.getUint32(tiff + entryOff + 8, le);
+  if(tiff + valOff + 24 > buf.byteLength) return null;
   const vals = [];
-  for(let j=0;j<3;j++){
-    const num = buf.getUint32(base+valOffset+j*8, le);
-    const den = buf.getUint32(base+valOffset+j*8+4, le);
-    vals.push(den ? num/den : 0);
+  for(let j = 0; j < 3; j++){
+    const num = buf.getUint32(tiff + valOff + j * 8, le);
+    const den = buf.getUint32(tiff + valOff + j * 8 + 4, le);
+    vals.push(den ? num / den : 0);
   }
   return vals;
 }
@@ -679,6 +712,8 @@ document.getElementById('photoInput').addEventListener('change', async (e)=>{
       document.getElementById('sheetHint').textContent =
         `📍 写真の位置情報から自動設定: ${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}`;
       showToast("📍 写真から位置情報を取得しました");
+    } else {
+      showToast("⚠ 写真に位置情報がありません。地図タップで位置を指定してください");
     }
     const dataUrl = await compressImage(file);
     currentPhotos.push(dataUrl);
