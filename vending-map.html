@@ -1047,6 +1047,7 @@ function openPhotoViewer(src){
   if(!src) return;
   pvReset();
   pvImgEl.src = src;
+  pvImgEl.style.cursor = 'zoom-in';
   document.getElementById('photoViewer').classList.add('show');
 }
 function closePhotoViewer(){
@@ -1095,6 +1096,49 @@ pvImgEl.addEventListener('touchend', (e) => {
   } else if(e.touches.length === 0){
     pvPanStart = null; pvPinch = null;
   }
+});
+
+// ---- PC（マウス）操作：ホイールで拡大／ドラッグで移動／ダブルクリックで切替 ----
+function pvCursor(){ pvImgEl.style.cursor = pvScale > 1 ? 'grab' : 'zoom-in'; }
+
+pvImgEl.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = pvImgEl.getBoundingClientRect();
+  const C0x = rect.left + rect.width/2 - pvTx;
+  const C0y = rect.top + rect.height/2 - pvTy;
+  const old = pvScale;
+  const factor = e.deltaY < 0 ? 1.15 : 1/1.15;
+  const ns = Math.max(1, Math.min(old * factor, 5));
+  if(ns === old) return;
+  const k = ns / old;
+  pvScale = ns;
+  // カーソル位置を中心に拡大
+  pvTx = e.clientX - C0x - k*(e.clientX - C0x - pvTx);
+  pvTy = e.clientY - C0y - k*(e.clientY - C0y - pvTy);
+  if(pvScale <= 1.01){ pvReset(); } else { pvApply(); }
+  pvCursor();
+}, {passive:false});
+
+let pvMouse = null;
+pvImgEl.addEventListener('mousedown', (e) => {
+  if(pvScale <= 1) return;
+  e.preventDefault();
+  pvMouse = { x: e.clientX - pvTx, y: e.clientY - pvTy };
+  pvImgEl.style.cursor = 'grabbing';
+});
+window.addEventListener('mousemove', (e) => {
+  if(!pvMouse) return;
+  pvTx = e.clientX - pvMouse.x;
+  pvTy = e.clientY - pvMouse.y;
+  pvApply();
+});
+window.addEventListener('mouseup', () => {
+  if(pvMouse){ pvMouse = null; pvCursor(); }
+});
+pvImgEl.addEventListener('dblclick', (e) => {
+  e.preventDefault();
+  pvScale > 1 ? pvReset() : (pvScale = 2.2, pvApply());
+  pvCursor();
 });
 
 document.getElementById('photoViewerClose').addEventListener('click', closePhotoViewer);
