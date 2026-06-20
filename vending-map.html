@@ -918,11 +918,10 @@ document.getElementById('areaInput').addEventListener('keydown', (e)=>{
 
 (async function init(){
   buildPayFilterChips();
+  const TOKYO = [35.6812, 139.7671];
+  initMap(TOKYO);
   const ok = initFirebase();
   if(ok) subscribeMachines();
-
-  const TOKYO = [35.6812, 139.7671]; // フォールバック: 東京駅
-  initMap(TOKYO);
   renderMarkers();
   tryGeolocateAndCenter();
 })();
