@@ -435,12 +435,13 @@ let swipeStartX = 0;
 // Firebase / Firestore
 // ============================================================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyD6fgEJu8VwX28poED7jtty2rvsAfSBXag",
+  authDomain: "jihanki-7917e.firebaseapp.com",
+  projectId: "jihanki-7917e",
+  storageBucket: "jihanki-7917e.firebasestorage.app",
+  messagingSenderId: "244617051073",
+  appId: "1:244617051073:web:e775d4af0e331ed7a9cd40",
+  measurementId: "G-E5EM0ND9F2"
 };
 
 let db = null;
@@ -481,6 +482,8 @@ function initFirebase(){
   }
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  const ml = document.getElementById('modeLabel');
+  if(ml) ml.textContent = 'クラウド同期モード';
   return true;
 }
 
