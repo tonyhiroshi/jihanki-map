@@ -167,6 +167,20 @@
     padding:10px 16px;background:rgba(212,161,58,.1);font-size:13px;color:#8a6c1e;
     text-align:center;font-weight:600;flex-shrink:0;
   }
+  .reg-search-bar{
+    display:flex;gap:8px;padding:10px 12px;flex-shrink:0;
+    background:var(--paper);border-bottom:1px solid var(--line);
+  }
+  .reg-search-bar input{
+    flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+    font-size:14px;background:#fff;color:var(--ink);
+  }
+  .reg-search-bar button{
+    flex-shrink:0;background:var(--steel);color:#fff;border:none;border-radius:10px;
+    padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;
+  }
+  .reg-search-bar button:active{opacity:.8;}
+  .reg-search-bar button:disabled{opacity:.5;cursor:default;}
   #regMap{flex:1;width:100%;min-height:200px;z-index:1;}
   .reg-map-bottom{
     padding:12px 16px;flex-shrink:0;display:flex;gap:10px;align-items:center;
@@ -314,7 +328,11 @@
   <div class="reg-body">
     <!-- Step 1: Map -->
     <div class="reg-map-step" id="regMapStep">
-      <div class="reg-map-instruction">位置を地図上でタップしてください</div>
+      <div class="reg-map-instruction">住所で検索するか、位置を地図上でタップしてください</div>
+      <div class="reg-search-bar">
+        <input type="text" id="regSearchInput" placeholder="住所で検索（例: 大田区池上6-27-14）" autocomplete="off">
+        <button type="button" id="regSearchBtn">検索</button>
+      </div>
       <div id="regMap"></div>
       <div class="reg-map-bottom">
         <span class="coord-text" id="regCoordText">未選択</span>
@@ -777,6 +795,53 @@ async function geocodeNominatim(query){
   return (data && data.length) ? { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } : null;
 }
 
+// 住所の詳細度からズームレベルを決める（号→19, 番地→18, 丁目→17, 地域→15）
+function zoomForAddress(norm){
+  if(/\d+[-の]\d+[-の]\d+/.test(norm)) return 19; // 号まで
+  if(/\d+[-の]\d+/.test(norm)) return 18;           // 番地まで
+  if(/\d+丁目?/.test(norm)) return 17;              // 丁目まで
+  return 15;                                          // 地域名のみ
+}
+
+// 登録画面の住所検索：GSI優先→Nominatimフォールバック、複数候補を順に試す
+async function searchRegAddress(){
+  const input = document.getElementById('regSearchInput');
+  const btn = document.getElementById('regSearchBtn');
+  const raw = (input.value || '').trim();
+  if(!raw){ return; }
+
+  const norm = normalizeAddress(raw);
+  const queries = buildQueries(norm);
+  const zoom = zoomForAddress(norm);
+
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = '検索中';
+  try{
+    let hit = null;
+    for(const q of queries){
+      try{ hit = await geocodeGSI(q); }catch(e){ hit = null; }
+      if(hit) break;
+    }
+    if(!hit){
+      for(const q of queries){
+        try{ hit = await geocodeNominatim(q); }catch(e){ hit = null; }
+        if(hit) break;
+      }
+    }
+    if(!hit){
+      showToast('該当する場所が見つかりませんでした');
+      return;
+    }
+    if(regMap){
+      regMap.flyTo([hit.lat, hit.lon], zoom, {duration: 0.8});
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
+
 // ============================================================
 // Screen Management
 // ============================================================
@@ -1154,6 +1219,12 @@ async function saveRegistration(){
 
 // Registration button handlers
 document.getElementById('startRegBtn').addEventListener('click', startRegistration);
+
+// 住所検索（ボタン / Enterキー）
+document.getElementById('regSearchBtn').addEventListener('click', searchRegAddress);
+document.getElementById('regSearchInput').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ e.preventDefault(); searchRegAddress(); }
+});
 
 document.getElementById('regBackBtn').addEventListener('click', () => {
   if(regStep > 1){
