@@ -477,7 +477,7 @@
         </div>
         <div class="field" style="flex:1;">
           <label>金額（任意）</label>
-          <input type="number" id="regPriceInput" inputmode="numeric" min="0" step="10" placeholder="160">
+          <input type="number" id="regPriceInput" inputmode="numeric" min="0" step="10" value="100" placeholder="160">
         </div>
       </div>
       <div class="field">
@@ -1295,9 +1295,11 @@ function startRegistration(){
   regStep = 1;
 
   // テキスト入力をリセット
-  ['regSearchInput','regFeatureInput','regPriceInput','regNoteInput'].forEach(id => {
+  ['regSearchInput','regFeatureInput','regNoteInput'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
+  const priceEl = document.getElementById('regPriceInput');
+  if(priceEl) priceEl.value = '100'; // 金額は100円スタート
 
   showScreen('regScreen');
   showRegStep(1);
