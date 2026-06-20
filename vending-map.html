@@ -282,6 +282,9 @@
     background:var(--steel);color:#fff;border:none;font-size:18px;line-height:44px;
     text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.35);z-index:10;cursor:pointer;
   }
+  /* ---- Navigation route: flowing animated line ---- */
+  @keyframes routeFlow { to { stroke-dashoffset: -18; } }
+  .route-flow{ animation: routeFlow .7s linear infinite; }
 
   /* ---- Toast ---- */
   .toast{
@@ -1361,6 +1364,23 @@ function openNavigation(machine){
   setTimeout(()=>{ try{ navMap.invalidateSize(); }catch(e){} }, 150);
 }
 
+// 目的地方向へ流れるアニメーションのルートを描画
+function drawRoute(coords){
+  if(navRouteLine){ navMap.removeLayer(navRouteLine); navRouteLine = null; }
+  // 下地（casing）：太く半透明の実線で奥行きを出す
+  const casing = L.polyline(coords, {
+    color: '#1a5276', weight: 9, opacity: 0.25,
+    lineCap: 'round', lineJoin: 'round'
+  });
+  // 上に流れる破線
+  const flow = L.polyline(coords, {
+    color: '#2a7de1', weight: 5, opacity: 0.95,
+    lineCap: 'round', lineJoin: 'round',
+    dashArray: '2, 16', className: 'route-flow'
+  });
+  navRouteLine = L.featureGroup([casing, flow]).addTo(navMap);
+}
+
 async function fetchRoute(lat1, lng1, lat2, lng2){
   try{
     const url = `https://router.project-osrm.org/route/v1/foot/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`;
@@ -1369,24 +1389,12 @@ async function fetchRoute(lat1, lng1, lat2, lng2){
     const data = await res.json();
     if(data.routes && data.routes.length > 0){
       const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-      if(navRouteLine){ navMap.removeLayer(navRouteLine); }
-      navRouteLine = L.polyline(coords, {
-        color: '#3498db',
-        weight: 4,
-        dashArray: '10, 8',
-        opacity: 0.8
-      }).addTo(navMap);
+      drawRoute(coords);
     }
   }catch(e){
     console.warn('OSRM routing failed, falling back to straight line:', e);
-    // Fallback: straight dashed line
-    if(navRouteLine){ navMap.removeLayer(navRouteLine); }
-    navRouteLine = L.polyline([[lat1, lng1], [lat2, lng2]], {
-      color: '#3498db',
-      weight: 3,
-      dashArray: '10, 8',
-      opacity: 0.7
-    }).addTo(navMap);
+    // Fallback: straight line (same flowing style)
+    drawRoute([[lat1, lng1], [lat2, lng2]]);
   }
 }
 
