@@ -180,11 +180,12 @@
   .reg-next-btn:disabled{opacity:.4;cursor:default;}
 
   /* Step 2: Photo */
-  .reg-photo-step{flex:1;display:none;flex-direction:column;padding:20px 16px;}
+  .reg-photo-step{flex:1;display:none;flex-direction:column;padding:20px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .reg-photo-step.active{display:flex;}
   .reg-photo-step .photo-preview{
-    flex:1;display:flex;align-items:center;justify-content:center;
-    background:#e7e1d0;border-radius:14px;overflow:hidden;margin-bottom:14px;min-height:200px;
+    flex:none;display:flex;align-items:center;justify-content:center;
+    background:#e7e1d0;border-radius:14px;overflow:hidden;margin-bottom:14px;
+    height:38vh;min-height:180px;
   }
   .reg-photo-step .photo-preview img{max-width:100%;max-height:100%;object-fit:contain;}
   .reg-photo-step .photo-preview .placeholder{color:#b8ad96;font-size:14px;text-align:center;padding:20px;}
@@ -204,7 +205,7 @@
     background:rgba(20,20,20,.7);color:#fff;border:none;font-size:10px;
     line-height:18px;text-align:center;cursor:pointer;padding:0;
   }
-  .reg-photo-bottom{flex-shrink:0;display:flex;gap:10px;}
+  .reg-photo-bottom{flex-shrink:0;display:flex;gap:10px;position:sticky;bottom:0;background:var(--paper);padding:10px 0 4px;margin-top:auto;}
   .reg-photo-bottom button{
     flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;
   }
