@@ -333,10 +333,22 @@ const firebaseConfig = {
 let db = null;
 let unsubscribeMachines = null;
 
+let useLocal = false;
+const LS_KEY = 'jihanki_machines';
+
+function loadLocal(){
+  try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }catch(e){ return []; }
+}
+function saveLocal(list){
+  localStorage.setItem(LS_KEY, JSON.stringify(list));
+}
+
 function initFirebase(){
   if(firebaseConfig.apiKey === "YOUR_API_KEY"){
-    showToast("⚠ firebaseConfigを設定してください（HTML内のコメント参照）");
-    console.warn("firebaseConfig が未設定です。HTML上部のコメントを確認してください。");
+    useLocal = true;
+    machines = loadLocal();
+    renderMarkers();
+    document.getElementById('modeLabel').textContent = 'ローカル保存モード';
     return false;
   }
   firebase.initializeApp(firebaseConfig);
@@ -344,7 +356,6 @@ function initFirebase(){
   return true;
 }
 
-// 自販機コレクションをリアルタイム監視。誰かが登録/更新すると全員の画面に自動反映される。
 function subscribeMachines(){
   if(!db) return;
   unsubscribeMachines = db.collection('machines').onSnapshot(
@@ -359,14 +370,26 @@ function subscribeMachines(){
   );
 }
 
-// 新規登録：Firestoreに1ドキュメント追加（IDは自動生成）
 async function createMachine(data){
+  if(useLocal){
+    data.id = 'local_' + Date.now();
+    machines.push(data);
+    saveLocal(machines);
+    renderMarkers();
+    return;
+  }
   if(!db) return;
   await db.collection('machines').add(data);
 }
 
-// 更新：既存ドキュメントを上書き
 async function updateMachine(id, data){
+  if(useLocal){
+    const idx = machines.findIndex(m=>m.id===id);
+    if(idx>=0){ machines[idx] = { ...machines[idx], ...data }; }
+    saveLocal(machines);
+    renderMarkers();
+    return;
+  }
   if(!db) return;
   await db.collection('machines').doc(id).set(data, { merge: true });
 }
@@ -705,7 +728,7 @@ async function saveSheet(){
     showToast("位置が未設定です。マップをタップしてください");
     return;
   }
-  if(!db){
+  if(!db && !useLocal){
     showToast("Firebaseが未設定のため保存できません");
     return;
   }
