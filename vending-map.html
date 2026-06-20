@@ -1050,10 +1050,11 @@ document.getElementById('detailCloseBtn2').addEventListener('click', closeDetail
 
 document.getElementById('detailDeleteBtn').addEventListener('click', () => {
   if(!detailMachine) return;
-  if(confirm('この自販機を削除しますか？')){
-    deleteMachine(detailMachine.id);
-    closeDetail();
-  }
+  // 誤操作防止のため2回確認する
+  if(!confirm('この自販機を削除しますか？')) return;
+  if(!confirm('本当に削除しますか？この操作は元に戻せません。')) return;
+  deleteMachine(detailMachine.id);
+  closeDetail();
 });
 
 document.getElementById('detailNavBtn').addEventListener('click', () => {
