@@ -296,6 +296,65 @@
   }
   .toast.show{opacity:1;}
 
+  /* ---- Rank bar (home header) ---- */
+  .rank-bar{
+    display:flex;align-items:center;gap:10px;margin-top:12px;
+    background:rgba(255,255,255,.1);border-radius:12px;padding:8px 12px;
+  }
+  .rank-bar-icon{font-size:22px;line-height:1;flex-shrink:0;}
+  .rank-bar-body{flex:1;min-width:0;}
+  .rank-bar-name{font-size:12px;font-weight:700;color:var(--paper);margin-bottom:5px;}
+  .rank-bar-name .rb-count{color:var(--coin);}
+  .rank-bar-gauge{height:7px;border-radius:99px;background:rgba(0,0,0,.25);overflow:hidden;}
+  .rank-bar-fill{
+    height:100%;width:0;border-radius:99px;
+    background:linear-gradient(90deg,var(--coin),#ffd980);
+    transition:width .8s cubic-bezier(.22,1,.36,1);
+  }
+
+  /* ---- Reward overlay ---- */
+  .reward-overlay{
+    display:none;position:fixed;inset:0;z-index:4000;
+    background:rgba(8,12,18,.72);backdrop-filter:blur(3px);
+    align-items:center;justify-content:center;
+  }
+  .reward-overlay.show{display:flex;}
+  .reward-card{
+    width:84%;max-width:330px;background:var(--paper);border-radius:20px;
+    padding:26px 22px 20px;text-align:center;position:relative;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+    animation:rewardPop .45s cubic-bezier(.22,1.4,.4,1);
+  }
+  @keyframes rewardPop{ 0%{transform:scale(.7);opacity:0;} 100%{transform:scale(1);opacity:1;} }
+  .reward-emoji{font-size:56px;line-height:1;margin-bottom:6px;display:inline-block;animation:rewardBounce .7s ease;}
+  @keyframes rewardBounce{ 0%{transform:translateY(-14px) scale(.6);} 60%{transform:translateY(4px) scale(1.1);} 100%{transform:translateY(0) scale(1);} }
+  .reward-title{font-size:16px;font-weight:800;color:var(--ink);margin-bottom:2px;}
+  .reward-count{font-size:13px;color:var(--ok);font-weight:800;margin-bottom:14px;}
+  .reward-rankup{
+    display:none;font-size:13px;font-weight:900;letter-spacing:2px;color:#fff;
+    background:linear-gradient(90deg,var(--coin),#ff8a3c);border-radius:99px;
+    padding:5px 14px;margin:0 auto 12px;width:max-content;
+    animation:rankupFlash 1s ease infinite alternate;
+  }
+  .reward-rankup.show{display:block;}
+  @keyframes rankupFlash{ from{box-shadow:0 0 0 rgba(212,161,58,.0);} to{box-shadow:0 0 16px rgba(255,160,60,.9);} }
+  .reward-rank-name{font-size:20px;font-weight:900;margin-bottom:10px;}
+  .reward-gauge{height:12px;border-radius:99px;background:#e2dcc9;overflow:hidden;margin-bottom:8px;}
+  .reward-gauge-fill{
+    height:100%;width:0;border-radius:99px;
+    background:linear-gradient(90deg,var(--coin),#ffd980);
+    transition:width 1s cubic-bezier(.22,1,.36,1);
+  }
+  .reward-gauge-label{font-size:12px;color:#7a6e58;font-weight:600;margin-bottom:18px;}
+  .reward-close{
+    width:100%;background:var(--ok);color:#fff;border:none;border-radius:12px;
+    padding:13px;font-size:15px;font-weight:800;cursor:pointer;
+  }
+  .reward-close:active{opacity:.85;}
+  /* confetti */
+  .confetti{position:absolute;top:-12px;width:9px;height:14px;opacity:.9;border-radius:2px;animation:confettiFall linear forwards;}
+  @keyframes confettiFall{ to{transform:translateY(420px) rotate(540deg);opacity:0;} }
+
   /* Leaflet overrides */
   .leaflet-popup-content-wrapper{border-radius:12px;}
   .leaflet-popup-content{margin:12px 14px;font-size:13px;}
@@ -309,6 +368,13 @@
     <h1><span class="dot"></span>自販機マップ</h1>
     <div class="sub">みんなで登録・更新するご近所の自販機データベース</div>
     <button class="register-btn" id="startRegBtn">自販機を新規登録</button>
+    <div class="rank-bar" id="rankBar">
+      <span class="rank-bar-icon" id="rankBarIcon">🔰</span>
+      <div class="rank-bar-body">
+        <div class="rank-bar-name" id="rankBarName"></div>
+        <div class="rank-bar-gauge"><div class="rank-bar-fill" id="rankBarFill"></div></div>
+      </div>
+    </div>
     <div class="mode-label" id="modeLabel"></div>
   </div>
   <div class="card-list" id="cardList">
@@ -427,6 +493,20 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ===== Reward overlay (gamification) ===== -->
+<div class="reward-overlay" id="rewardOverlay">
+  <div class="reward-card" id="rewardCard">
+    <div class="reward-emoji" id="rewardEmoji">🥤</div>
+    <div class="reward-title">登録ありがとう！</div>
+    <div class="reward-count" id="rewardCount">+1</div>
+    <div class="reward-rankup" id="rewardRankup">★ ランクアップ ★</div>
+    <div class="reward-rank-name" id="rewardRankName"></div>
+    <div class="reward-gauge"><div class="reward-gauge-fill" id="rewardGaugeFill"></div></div>
+    <div class="reward-gauge-label" id="rewardGaugeLabel"></div>
+    <button class="reward-close" id="rewardCloseBtn">つづける</button>
+  </div>
+</div>
 
 <!-- ===== Fullscreen photo viewer ===== -->
 <div class="photo-viewer" id="photoViewer">
@@ -1364,9 +1444,13 @@ async function saveRegistration(){
   saveBtn.textContent = '保存中...';
   try{
     await createMachine(payload);
-    showToast("保存しました");
     showScreen('homeScreen');
     renderCardList();
+    // ご褒美演出（ランク／ゲージ）
+    const prevCount = getMyCount();
+    const newCount = prevCount + 1;
+    setMyCount(newCount);
+    showRegistrationReward(prevCount, newCount);
   }catch(e){
     console.error(e);
     showToast("保存に失敗: " + (e.message || e));
@@ -1529,12 +1613,147 @@ function geolocateUser(){
 }
 
 // ============================================================
+// Gamification: 自分の登録数でランクアップ
+// ============================================================
+const RANKS = [
+  { min:0,   name:'かけだし',   icon:'🔰' },
+  { min:3,   name:'ブロンズ',   icon:'🥉' },
+  { min:10,  name:'シルバー',   icon:'🥈' },
+  { min:25,  name:'ゴールド',   icon:'🥇' },
+  { min:50,  name:'プラチナ',   icon:'💎' },
+  { min:100, name:'マスター',   icon:'👑' },
+  { min:250, name:'レジェンド', icon:'🏆' }
+];
+const MYCOUNT_KEY = 'jihanki_mycount';
+
+function getMyCount(){
+  try{ return parseInt(localStorage.getItem(MYCOUNT_KEY) || '0', 10) || 0; }catch(e){ return myCountMem; }
+}
+let myCountMem = 0;
+function setMyCount(n){
+  myCountMem = n;
+  try{ localStorage.setItem(MYCOUNT_KEY, String(n)); }catch(e){}
+}
+
+// count に対するランク情報（現ランク・次ランク・進捗0-1）
+function getRankInfo(count){
+  let idx = 0;
+  for(let i = 0; i < RANKS.length; i++){ if(count >= RANKS[i].min) idx = i; }
+  const rank = RANKS[idx];
+  const next = RANKS[idx + 1] || null;
+  let progress = 1, toNext = 0;
+  if(next){
+    const span = next.min - rank.min;
+    progress = Math.max(0, Math.min((count - rank.min) / span, 1));
+    toNext = next.min - count;
+  }
+  return { idx, rank, next, progress, toNext };
+}
+
+function renderRankBadge(){
+  const count = getMyCount();
+  const info = getRankInfo(count);
+  document.getElementById('rankBarIcon').textContent = info.rank.icon;
+  const nameEl = document.getElementById('rankBarName');
+  nameEl.innerHTML = `${info.rank.name} ・ <span class="rb-count">${count}件</span>登録`
+    + (info.next ? `（あと${info.toNext}件で ${info.next.name}）` : '（最高ランク達成！）');
+  document.getElementById('rankBarFill').style.width = Math.round(info.progress * 100) + '%';
+}
+
+function fireConfetti(){
+  const card = document.getElementById('rewardCard');
+  const colors = ['#d4a13a','#ff8a3c','#3aa66b','#4fc3f7','#ff5a3c','#ffd980'];
+  for(let i = 0; i < 28; i++){
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + '%';
+    c.style.background = colors[i % colors.length];
+    c.style.animationDuration = (1.6 + Math.random() * 1.2) + 's';
+    c.style.animationDelay = (Math.random() * 0.3) + 's';
+    card.appendChild(c);
+    setTimeout(() => c.remove(), 3200);
+  }
+}
+
+// 登録成功時のご褒美演出
+function showRegistrationReward(prevCount, newCount){
+  const prev = getRankInfo(prevCount);
+  const now = getRankInfo(newCount);
+  const rankedUp = now.idx > prev.idx;
+
+  document.getElementById('rewardEmoji').textContent = now.rank.icon;
+  document.getElementById('rewardCount').textContent = `通算 ${newCount} 件目の登録！`;
+  document.getElementById('rewardRankName').textContent = now.rank.name;
+  document.getElementById('rewardRankup').classList.toggle('show', rankedUp);
+  document.getElementById('rewardGaugeLabel').textContent = now.next
+    ? `あと ${now.toNext} 件で「${now.next.name}」`
+    : '最高ランク達成！おめでとう！';
+
+  const fill = document.getElementById('rewardGaugeFill');
+  // ランクアップ時は前ランクのゲージを満タンにしてから新ランクへ
+  fill.style.transition = 'none';
+  fill.style.width = Math.round((rankedUp ? prev.progress : prev.progress) * 100) + '%';
+
+  document.getElementById('rewardOverlay').classList.add('show');
+
+  // アニメーション開始
+  requestAnimationFrame(() => {
+    if(rankedUp){
+      fill.style.transition = 'width .6s ease';
+      fill.style.width = '100%';
+      setTimeout(() => {
+        fill.style.transition = 'none';
+        fill.style.width = '0%';
+        requestAnimationFrame(() => {
+          fill.style.transition = 'width .9s cubic-bezier(.22,1,.36,1)';
+          fill.style.width = Math.round(now.progress * 100) + '%';
+        });
+        fireConfetti();
+      }, 650);
+    } else {
+      fill.style.transition = 'width .9s cubic-bezier(.22,1,.36,1)';
+      fill.style.width = Math.round(now.progress * 100) + '%';
+    }
+  });
+
+  renderRankBadge();
+}
+
+document.getElementById('rewardCloseBtn').addEventListener('click', () => {
+  document.getElementById('rewardOverlay').classList.remove('show');
+});
+document.getElementById('rewardOverlay').addEventListener('click', (e) => {
+  if(e.target.id === 'rewardOverlay') e.currentTarget.classList.remove('show');
+});
+
+// ============================================================
+// Geolocation
+// ============================================================
+function geolocateUser(){
+  if(!navigator.geolocation) return;
+  try{
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        renderCardList();
+      },
+      () => { /* denied/failed - cards still show, just without distance */ },
+      {timeout:8000, maximumAge:60000}
+    );
+  }catch(e){
+    // Permissions-Policy block etc.
+  }
+}
+
+// ============================================================
 // Init
 // ============================================================
 (function init(){
   const ok = initFirebase();
   if(ok) subscribeMachines();
   renderCardList();
+  renderRankBadge();
   geolocateUser();
 })();
 </script>
