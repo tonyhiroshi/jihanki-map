@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>自販機マップ | Jihanki Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  :root{
+    --ink:#10151c;
+    --paper:#f3efe4;
+    --steel:#2b3a4a;
+    --steel-deep:#1a2530;
+    --coin:#d4a13a;
+    --neon:#ff5a3c;
+    --ok:#3aa66b;
+    --line:#c9c2ac;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--ink);font-family:'Segoe UI',-apple-system,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;}
+  body{display:flex;flex-direction:column;height:100vh;overflow:hidden;color:var(--ink);}
+
+  /* ---- Header ---- */
+  header{
+    background:linear-gradient(180deg,var(--steel) 0%,var(--steel-deep) 100%);
+    color:var(--paper);
+    padding:14px 16px 12px;
+    position:relative;
+    z-index:30;
+    box-shadow:0 3px 10px rgba(0,0,0,.35);
+    flex-shrink:0;
+  }
+  header h1{
+    margin:0;
+    font-size:19px;
+    font-weight:800;
+    letter-spacing:.5px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  header h1 .dot{
+    width:9px;height:9px;border-radius:50%;
+    background:var(--neon);
+    box-shadow:0 0 8px var(--neon);
+    flex-shrink:0;
+  }
+  header .sub{font-size:11px;opacity:.65;margin-top:2px;letter-spacing:.5px;}
+
+  /* ---- Search bar ---- */
+  .searchbar{
+    margin-top:10px;
+    display:flex;gap:6px;
+  }
+  .searchbar input{
+    flex:1;
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:10px;
+    padding:9px 12px;
+    color:var(--paper);
+    font-size:14px;
+    outline:none;
+  }
+  .searchbar input::placeholder{color:rgba(243,239,228,.45);}
+  .searchbar button{
+    background:var(--coin);
+    border:none;
+    border-radius:10px;
+    padding:0 14px;
+    font-weight:700;
+    color:#241a05;
+    font-size:13px;
+    cursor:pointer;
+  }
+
+  .filters{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+    overflow-x:auto;
+    padding-bottom:2px;
+    -ms-overflow-style:none;scrollbar-width:none;
+  }
+  .filters::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0;
+    background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.2);
+    color:var(--paper);
+    border-radius:999px;
+    padding:6px 12px;
+    font-size:12px;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:.15s;
+  }
+  .chip.active{background:var(--coin);color:#241a05;border-color:var(--coin);font-weight:700;}
+
+  /* ---- Map ---- */
+  #map{flex:1;width:100%;min-height:300px;position:relative;z-index:1;background:#dde3e8;}
+  .leaflet-popup-content-wrapper{border-radius:12px;}
+  .leaflet-popup-content{margin:12px 14px;font-size:13px;min-width:200px;}
+
+  /* ---- FAB ---- */
+  .fab{
+    position:absolute;
+    right:16px;
+    bottom:96px;
+    width:54px;height:54px;
+    border-radius:50%;
+    background:var(--neon);
+    color:#fff;
+    border:none;
+    font-size:28px;
+    line-height:54px;
+    text-align:center;
+    box-shadow:0 6px 16px rgba(255,90,60,.45);
+    z-index:20;
+    cursor:pointer;
+  }
+  .fab.locate{
+    bottom:224px;
+    background:var(--steel);
+    font-size:20px;
+    box-shadow:0 6px 16px rgba(0,0,0,.35);
+  }
+  .fab.photo{
+    bottom:160px;
+    background:var(--coin);
+    font-size:20px;
+    box-shadow:0 6px 16px rgba(212,161,58,.45);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+  }
+  .fab.switchmap{
+    bottom:288px;
+    background:var(--steel);
+    font-size:20px;
+    box-shadow:0 6px 16px rgba(0,0,0,.35);
+  }
+
+  /* ---- Bottom result count strip ---- */
+  .strip{
+    background:var(--paper);
+    border-top:1px solid var(--line);
+    padding:8px 16px;
+    font-size:12px;
+    color:#54493a;
+    flex-shrink:0;
+    z-index:25;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .strip b{color:var(--ink);}
+
+  /* ---- Modal (add / edit) ---- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(10,12,16,.55);
+    display:none;align-items:flex-end;justify-content:center;z-index:50;
+  }
+  .overlay.show{display:flex;}
+  .sheet{
+    background:var(--paper);
+    width:100%;
+    max-width:480px;
+    border-radius:18px 18px 0 0;
+    padding:18px 18px 22px;
+    max-height:88vh;
+    overflow-y:auto;
+    animation:up .18s ease-out;
+  }
+  @keyframes up{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  .sheet h2{margin:0 0 2px;font-size:17px;}
+  .sheet .hint{font-size:12px;color:#7a6e58;margin-bottom:14px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--steel-deep);margin-bottom:6px;letter-spacing:.3px;}
+  .field select,.field input[type=text]{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:#fff;
+  }
+  .tagrow,.payrow{display:flex;flex-wrap:wrap;gap:6px;}
+  .tagopt{
+    border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;cursor:pointer;
+  }
+  .tagopt.sel{background:var(--steel);color:#fff;border-color:var(--steel);}
+  .sheet-actions{display:flex;gap:10px;margin-top:18px;}
+  .sheet-actions button{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;}
+  .btn-cancel{background:#e7e1d0;color:#4a4233;}
+  .btn-save{background:var(--ok);color:#fff;}
+
+  .photoRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .photoThumb{
+    position:relative;width:72px;height:72px;border-radius:10px;overflow:hidden;border:1px solid var(--line);
+  }
+  .photoThumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photoThumb .rm{
+    position:absolute;top:2px;right:2px;background:rgba(20,20,20,.7);color:#fff;
+    width:20px;height:20px;border-radius:50%;border:none;font-size:12px;line-height:20px;text-align:center;cursor:pointer;padding:0;
+  }
+  .photoAddBtn{
+    display:inline-flex;align-items:center;gap:6px;
+    background:#fff;border:1px dashed var(--line);border-radius:10px;
+    padding:9px 14px;font-size:13px;color:#54493a;cursor:pointer;
+  }
+
+  .popupPhotos{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;}
+  .popupPhotos img{width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;}
+
+  .toast{
+    position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;
+    z-index:80;opacity:0;transition:opacity .25s;pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot"></span>自販機マップ</h1>
+  <div class="sub">みんなで登録・更新するご近所の自販機データベース</div>
+  <div class="searchbar">
+    <input id="searchInput" type="text" placeholder="商品名・メーカーで検索（例: 炭酸, コカコーラ）">
+    <button id="searchBtn">検索</button>
+  </div>
+  <div class="searchbar" style="margin-top:6px;">
+    <input id="areaInput" type="text" placeholder="地域で探す（例: 渋谷区, 新宿駅, 大田区）">
+    <button id="areaBtn">移動</button>
+  </div>
+  <div class="filters" id="payFilters"></div>
+</header>
+
+<div id="map"></div>
+
+<button class="fab switchmap" id="switchMapBtn" title="地図を切り替え">🗺</button>
+<button class="fab locate" id="locateBtn" title="現在地に移動">📍</button>
+<label class="fab photo" id="photoFab" title="写真から登録">📷
+  <input type="file" id="photoFabInput" accept="image/*" capture="environment" style="display:none;">
+</label>
+<button class="fab" id="addBtn" title="自販機を登録">＋</button>
+
+<div class="strip">
+  <span>表示中: <b id="countLabel">0</b> 件</span>
+  <span id="modeLabel" style="color:#a8472f;font-weight:700;"></span>
+</div>
+
+<!-- Add / Edit sheet -->
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <h2 id="sheetTitle">自販機を登録</h2>
+    <div class="hint" id="sheetHint">マップ上の位置をタップしてから入力してください</div>
+
+    <div class="field">
+      <label>メーカー</label>
+      <select id="makerSelect">
+        <option>コカ・コーラ</option>
+        <option>サントリー</option>
+        <option>アサヒ飲料</option>
+        <option>ダイドードリンコ</option>
+        <option>伊藤園</option>
+        <option>JR東日本ウォーターズ</option>
+        <option>キリン ビバレッジ</option>
+        <option>ポッカサッポロ</option>
+        <option>その他</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>商品ラインナップ（複数選択可）</label>
+      <div class="tagrow" id="productTags"></div>
+    </div>
+
+    <div class="field">
+      <label>対応決済方法</label>
+      <div class="payrow" id="payTags"></div>
+    </div>
+
+    <div class="field">
+      <label>メモ（任意）</label>
+      <input type="text" id="noteInput" placeholder="例: 駅の改札横、自転車置き場前 など">
+    </div>
+
+    <div class="field">
+      <label>写真（最大3枚）</label>
+      <div class="photoRow" id="photoRow"></div>
+      <label class="photoAddBtn" id="photoAddBtn">
+        📷 写真を追加
+        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
+      </label>
+      <div class="hint" id="photoHint" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelBtn">キャンセル</button>
+      <button class="btn-save" id="saveBtn">保存する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const PRODUCT_OPTIONS = ["炭酸","お茶","コーヒー","水","スポーツ飲料","ジュース","エナジー系","カップ自販機","アイス","軽食"];
+const PAY_OPTIONS = ["現金","交通系IC","QRコード決済","クレジット(タッチ)","電子マネー"];
+
+let map, markersLayer;
+let machines = [];
+let pendingLatLng = null;
+let editingId = null;
+let selectedProducts = new Set();
+let selectedPays = new Set();
+let activePayFilter = null;
+let currentPhotos = [];
+const MAX_PHOTOS = 3;
+
+// ============================================================
+// Firebase / Firestore 設定
+// 1. https://console.firebase.google.com で新規プロジェクトを作成
+// 2. 「ビルド」→「Firestore Database」を有効化（テストモードでOK、後述のルールに差し替え推奨）
+// 3. プロジェクト概要の「ウェブアプリを追加」で取得した設定値を下に貼り付け
+// ============================================================
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let db = null;
+let unsubscribeMachines = null;
+
+function initFirebase(){
+  if(firebaseConfig.apiKey === "YOUR_API_KEY"){
+    showToast("⚠ firebaseConfigを設定してください（HTML内のコメント参照）");
+    console.warn("firebaseConfig が未設定です。HTML上部のコメントを確認してください。");
+    return false;
+  }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  return true;
+}
+
+// 自販機コレクションをリアルタイム監視。誰かが登録/更新すると全員の画面に自動反映される。
+function subscribeMachines(){
+  if(!db) return;
+  unsubscribeMachines = db.collection('machines').onSnapshot(
+    (snapshot)=>{
+      machines = snapshot.docs.map(doc=>({ id: doc.id, ...doc.data() }));
+      renderMarkers();
+    },
+    (err)=>{
+      console.error(err);
+      showToast("データ取得に失敗しました（Firestoreの設定/通信をご確認ください）");
+    }
+  );
+}
+
+// 新規登録：Firestoreに1ドキュメント追加（IDは自動生成）
+async function createMachine(data){
+  if(!db) return;
+  await db.collection('machines').add(data);
+}
+
+// 更新：既存ドキュメントを上書き
+async function updateMachine(id, data){
+  if(!db) return;
+  await db.collection('machines').doc(id).set(data, { merge: true });
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2000);
+}
+
+let currentTileIndex = 0;
+const TILE_LAYERS = [
+  { name:'標準地図', url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom:19, attr:'&copy; OpenStreetMap contributors' },
+  { name:'航空写真', url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom:18, attr:'&copy; Esri' },
+  { name:'地形図',   url:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', maxZoom:17, attr:'&copy; OpenTopoMap' }
+];
+let activeTile = null;
+
+function switchTileLayer(){
+  currentTileIndex = (currentTileIndex + 1) % TILE_LAYERS.length;
+  const t = TILE_LAYERS[currentTileIndex];
+  if(activeTile) map.removeLayer(activeTile);
+  activeTile = L.tileLayer(t.url, { maxZoom:t.maxZoom, attribution:t.attr }).addTo(map);
+  showToast('🗺 ' + t.name);
+}
+
+function initMap(center){
+  map = L.map('map', {zoomControl:true, maxZoom:19}).setView(center, 16);
+  const t = TILE_LAYERS[0];
+  activeTile = L.tileLayer(t.url, { maxZoom:t.maxZoom, attribution:t.attr }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+
+  map.on('click', (e)=>{
+    pendingLatLng = e.latlng;
+    openSheet(null);
+  });
+
+  // レイアウト確定後にサイズを再計算（コンテナが0pxで初期化された場合の保険）
+  setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} }, 150);
+  window.addEventListener('resize', ()=>{ try{ map.invalidateSize(); }catch(e){} });
+}
+
+function tryGeolocateAndCenter(){
+  if(!navigator.geolocation) return;
+  try{
+    navigator.geolocation.getCurrentPosition(
+      pos => { try{ map.setView([pos.coords.latitude, pos.coords.longitude], 16); }catch(e){} },
+      () => { /* 拒否・失敗時は東京駅の表示のまま */ },
+      {timeout:5000, maximumAge:60000}
+    );
+  }catch(e){
+    /* Permissions-Policyでブロックされる場合などはここに来る。地図は既に表示済みなので無視してOK */
+  }
+}
+
+function timeAgo(ts){
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff/60000);
+  if(min < 1) return "たった今";
+  if(min < 60) return min + "分前";
+  const hr = Math.floor(min/60);
+  if(hr < 24) return hr + "時間前";
+  const day = Math.floor(hr/24);
+  if(day < 30) return day + "日前";
+  return new Date(ts).toLocaleDateString('ja-JP');
+}
+
+function buildPayFilterChips(){
+  const wrap = document.getElementById('payFilters');
+  wrap.innerHTML = '';
+  PAY_OPTIONS.forEach(p=>{
+    const c = document.createElement('div');
+    c.className = 'chip' + (activePayFilter===p ? ' active' : '');
+    c.textContent = p;
+    c.onclick = ()=>{
+      activePayFilter = (activePayFilter===p) ? null : p;
+      buildPayFilterChips();
+      renderMarkers();
+    };
+    wrap.appendChild(c);
+  });
+}
+
+function matchesFilter(m, query){
+  if(activePayFilter && !(m.pays||[]).includes(activePayFilter)) return false;
+  if(!query) return true;
+  const hay = (m.maker + ' ' + (m.products||[]).join(' ') + ' ' + (m.note||'')).toLowerCase();
+  return hay.includes(query.toLowerCase());
+}
+
+function renderMarkers(){
+  markersLayer.clearLayers();
+  const query = document.getElementById('searchInput').value.trim();
+  const filtered = machines.filter(m=>matchesFilter(m, query));
+  document.getElementById('countLabel').textContent = filtered.length;
+
+  filtered.forEach(m=>{
+    const marker = L.circleMarker([m.lat, m.lng], {
+      radius: 9,
+      color:'#1a2530',
+      weight:2,
+      fillColor:'#ff5a3c',
+      fillOpacity:0.9
+    }).addTo(markersLayer);
+
+    const html = `
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px;">${escapeHtml(m.maker)}</div>
+      ${(m.photos&&m.photos.length) ? `<div class="popupPhotos">${m.photos.map(p=>`<img src="${p}">`).join('')}</div>` : ''}
+      <div style="color:#555;margin-bottom:6px;">${(m.products||[]).map(escapeHtml).join(' / ') || '（商品情報なし）'}</div>
+      <div style="font-size:12px;color:#777;margin-bottom:6px;">決済: ${(m.pays||[]).map(escapeHtml).join('・') || '不明'}</div>
+      ${m.note ? `<div style="font-size:12px;color:#777;margin-bottom:6px;">📝 ${escapeHtml(m.note)}</div>` : ''}
+      <div style="font-size:11px;color:#a8a8a8;margin-bottom:8px;">更新: ${timeAgo(m.updatedAt)}</div>
+      <button data-id="${m.id}" class="editBtn" style="background:#2b3a4a;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">情報を更新</button>
+    `;
+    marker.bindPopup(html);
+    marker.on('popupopen', ()=>{
+      const btn = document.querySelector('.editBtn[data-id="'+m.id+'"]');
+      if(btn){
+        btn.onclick = ()=>{ map.closePopup(); openSheet(m); };
+      }
+    });
+  });
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function readExifGPS(file){
+  return new Promise((resolve)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      try{
+        const buf = new DataView(e.target.result);
+        if(buf.getUint16(0) !== 0xFFD8){ resolve(null); return; }
+        let offset = 2;
+        while(offset < buf.byteLength - 1){
+          const marker = buf.getUint16(offset);
+          if(marker === 0xFFE1){ // APP1 (EXIF)
+            const exif = parseExif(buf, offset + 4);
+            resolve(exif);
+            return;
+          }
+          if((marker & 0xFF00) !== 0xFF00) break;
+          offset += 2 + buf.getUint16(offset + 2);
+        }
+        resolve(null);
+      }catch(ex){ resolve(null); }
+    };
+    reader.onerror = ()=> resolve(null);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseExif(buf, start){
+  const exifStr = [0x45,0x78,0x69,0x66,0x00,0x00];
+  for(let i=0;i<6;i++) if(buf.getUint8(start+i)!==exifStr[i]) return null;
+  const tiffStart = start + 6;
+  const le = buf.getUint16(tiffStart) === 0x4949;
+  const g = (o,fn)=> buf[fn](tiffStart+o, le);
+  const ifdOffset = g(4,'getUint32');
+  const gpsIfdPointer = findTag(buf, tiffStart, ifdOffset, 0x8825, le);
+  if(!gpsIfdPointer) return null;
+  const gpsOffset = buf.getUint32(tiffStart + gpsIfdPointer + 8, le);
+  return readGPSIfd(buf, tiffStart, gpsOffset, le);
+}
+
+function findTag(buf, base, ifdOff, tag, le){
+  const count = buf.getUint16(base+ifdOff, le);
+  for(let i=0;i<count;i++){
+    const entryOff = ifdOff + 2 + i*12;
+    if(buf.getUint16(base+entryOff, le) === tag) return entryOff;
+  }
+  return null;
+}
+
+function readGPSIfd(buf, base, ifdOff, le){
+  const count = buf.getUint16(base+ifdOff, le);
+  let latRef='N', lonRef='E', latVals=null, lonVals=null;
+  for(let i=0;i<count;i++){
+    const off = ifdOff + 2 + i*12;
+    const tag = buf.getUint16(base+off, le);
+    if(tag===1) latRef = String.fromCharCode(buf.getUint8(base+off+8));
+    if(tag===3) lonRef = String.fromCharCode(buf.getUint8(base+off+8));
+    if(tag===2) latVals = readRationals(buf, base, off, le);
+    if(tag===4) lonVals = readRationals(buf, base, off, le);
+  }
+  if(!latVals || !lonVals) return null;
+  let lat = latVals[0] + latVals[1]/60 + latVals[2]/3600;
+  let lon = lonVals[0] + lonVals[1]/60 + lonVals[2]/3600;
+  if(latRef==='S') lat = -lat;
+  if(lonRef==='W') lon = -lon;
+  if(lat===0 && lon===0) return null;
+  return { lat, lon };
+}
+
+function readRationals(buf, base, entryOff, le){
+  const valOffset = buf.getUint32(base+entryOff+8, le);
+  const vals = [];
+  for(let j=0;j<3;j++){
+    const num = buf.getUint32(base+valOffset+j*8, le);
+    const den = buf.getUint32(base+valOffset+j*8+4, le);
+    vals.push(den ? num/den : 0);
+  }
+  return vals;
+}
+
+function compressImage(file, maxSize=640, quality=0.6){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > h && w > maxSize){ h = Math.round(h * maxSize / w); w = maxSize; }
+        else if(h > maxSize){ w = Math.round(w * maxSize / h); h = maxSize; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotoRow(){
+  const row = document.getElementById('photoRow');
+  row.innerHTML = '';
+  currentPhotos.forEach((p, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'photoThumb';
+    div.innerHTML = `<img src="${p}"><button class="rm" data-idx="${idx}">✕</button>`;
+    div.querySelector('.rm').onclick = ()=>{
+      currentPhotos.splice(idx,1);
+      renderPhotoRow();
+    };
+    row.appendChild(div);
+  });
+  document.getElementById('photoAddBtn').style.display = currentPhotos.length >= MAX_PHOTOS ? 'none' : 'inline-flex';
+  document.getElementById('photoHint').textContent = currentPhotos.length >= MAX_PHOTOS
+    ? '上限の3枚に達しました'
+    : `${currentPhotos.length} / ${MAX_PHOTOS} 枚`;
+}
+
+document.getElementById('photoInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  if(currentPhotos.length >= MAX_PHOTOS){
+    showToast("写真は3枚までです");
+    return;
+  }
+  try{
+    const gps = await readExifGPS(file);
+    if(gps){
+      pendingLatLng = L.latLng(gps.lat, gps.lon);
+      map.flyTo([gps.lat, gps.lon], 19, { duration: 1.0 });
+      document.getElementById('sheetHint').textContent =
+        `📍 写真の位置情報から自動設定: ${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}`;
+      showToast("📍 写真から位置情報を取得しました");
+    }
+    const dataUrl = await compressImage(file);
+    currentPhotos.push(dataUrl);
+    renderPhotoRow();
+  }catch(err){
+    showToast("写真の処理に失敗しました");
+  }
+});
+function buildTagOptions(){
+  const pWrap = document.getElementById('productTags');
+  pWrap.innerHTML = '';
+  PRODUCT_OPTIONS.forEach(p=>{
+    const el = document.createElement('div');
+    el.className='tagopt';
+    el.textContent = p;
+    el.onclick = ()=>{
+      if(selectedProducts.has(p)) selectedProducts.delete(p); else selectedProducts.add(p);
+      el.classList.toggle('sel');
+    };
+    pWrap.appendChild(el);
+  });
+  const payWrap = document.getElementById('payTags');
+  payWrap.innerHTML = '';
+  PAY_OPTIONS.forEach(p=>{
+    const el = document.createElement('div');
+    el.className='tagopt';
+    el.textContent = p;
+    el.onclick = ()=>{
+      if(selectedPays.has(p)) selectedPays.delete(p); else selectedPays.add(p);
+      el.classList.toggle('sel');
+    };
+    payWrap.appendChild(el);
+  });
+}
+
+function openSheet(machine){
+  editingId = machine ? machine.id : null;
+  selectedProducts = new Set(machine ? machine.products : []);
+  selectedPays = new Set(machine ? machine.pays : []);
+  currentPhotos = machine && machine.photos ? machine.photos.slice() : [];
+  renderPhotoRow();
+  document.getElementById('makerSelect').value = machine ? machine.maker : "コカ・コーラ";
+  document.getElementById('noteInput').value = machine ? (machine.note||'') : '';
+  document.getElementById('sheetTitle').textContent = machine ? '自販機情報を更新' : '自販機を登録';
+  document.getElementById('sheetHint').textContent = machine
+    ? '商品ラインナップや決済方法の変更を反映できます'
+    : (pendingLatLng ? `登録位置: ${pendingLatLng.lat.toFixed(5)}, ${pendingLatLng.lng.toFixed(5)}` : 'マップをタップして位置を指定してください');
+
+  buildTagOptions();
+  // re-apply selection state visuals
+  document.querySelectorAll('#productTags .tagopt').forEach(el=>{
+    if(selectedProducts.has(el.textContent)) el.classList.add('sel');
+  });
+  document.querySelectorAll('#payTags .tagopt').forEach(el=>{
+    if(selectedPays.has(el.textContent)) el.classList.add('sel');
+  });
+
+  if(machine) pendingLatLng = L.latLng(machine.lat, machine.lng);
+  document.getElementById('overlay').classList.add('show');
+}
+
+function closeSheet(){
+  document.getElementById('overlay').classList.remove('show');
+  pendingLatLng = null;
+  editingId = null;
+  currentPhotos = [];
+}
+
+async function saveSheet(){
+  if(!pendingLatLng){
+    showToast("位置が未設定です。マップをタップしてください");
+    return;
+  }
+  if(!db){
+    showToast("Firebaseが未設定のため保存できません");
+    return;
+  }
+  const maker = document.getElementById('makerSelect').value;
+  const note = document.getElementById('noteInput').value.trim();
+  const payload = {
+    lat: pendingLatLng.lat,
+    lng: pendingLatLng.lng,
+    maker,
+    products: Array.from(selectedProducts),
+    pays: Array.from(selectedPays),
+    note,
+    photos: currentPhotos.slice(),
+    updatedAt: Date.now()
+  };
+
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = '保存中...';
+  try{
+    if(editingId){
+      await updateMachine(editingId, payload);
+    } else {
+      await createMachine(payload);
+    }
+    closeSheet();
+    showToast("保存しました");
+  }catch(e){
+    console.error(e);
+    showToast("保存に失敗しました（通信/Firestoreルールをご確認ください）");
+  }finally{
+    saveBtn.disabled = false;
+    saveBtn.textContent = '保存する';
+  }
+}
+
+function locateMe(){
+  if(!navigator.geolocation){
+    showToast("位置情報が利用できません");
+    return;
+  }
+  try{
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      map.setView(ll, 17);
+    }, ()=>{
+      showToast("位置情報を取得できませんでした");
+    }, {timeout:5000});
+  }catch(e){
+    showToast("位置情報を取得できませんでした");
+  }
+}
+
+document.getElementById('addBtn').onclick = ()=>{
+  if(!pendingLatLng){
+    const c = map.getCenter();
+    pendingLatLng = c;
+  }
+  openSheet(null);
+};
+document.getElementById('locateBtn').onclick = locateMe;
+document.getElementById('switchMapBtn').onclick = switchTileLayer;
+document.getElementById('photoFabInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  try{
+    const gps = await readExifGPS(file);
+    if(gps){
+      pendingLatLng = L.latLng(gps.lat, gps.lon);
+      map.flyTo([gps.lat, gps.lon], 19, { duration: 1.0 });
+    } else {
+      const c = map.getCenter();
+      pendingLatLng = c;
+      showToast("位置情報がありません。現在の地図中心で登録します");
+    }
+    const dataUrl = await compressImage(file);
+    currentPhotos = [dataUrl];
+    openSheet(null);
+    renderPhotoRow();
+    if(gps){
+      document.getElementById('sheetHint').textContent =
+        `📍 写真の位置情報から自動設定: ${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}`;
+    }
+  }catch(err){
+    showToast("写真の処理に失敗しました");
+  }
+});
+document.getElementById('cancelBtn').onclick = closeSheet;
+document.getElementById('saveBtn').onclick = saveSheet;
+function normalizeAddress(q){
+  return q
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[ー－—–]/g, '-');
+}
+
+function detectZoom(norm){
+  if(/\d+[-の]\d+[-の]\d+|\d+丁目.*\d+番.*\d+号/.test(norm)) return 19;
+  if(/\d+[-の]\d+|\d+丁目|\d+番地?/.test(norm)) return 18;
+  return 15;
+}
+
+function toChome(norm){
+  const m = norm.match(/^(.+?)(\d+)[-の](\d+)[-の](\d+)$/);
+  if(m) return m[1] + m[2] + '丁目' + m[3] + '番' + m[4] + '号';
+  const m2 = norm.match(/^(.+?)(\d+)[-の](\d+)$/);
+  if(m2) return m2[1] + m2[2] + '丁目' + m2[3] + '番';
+  return null;
+}
+
+function buildQueries(norm){
+  const queries = [];
+  const chome = toChome(norm);
+  if(chome) queries.push(chome);
+  queries.push(norm);
+  let s = norm;
+  s = s.replace(/[-の]?\d+号?\s*$/, '');
+  if(s !== norm) queries.push(s);
+  s = s.replace(/[-の]?\d+番地?\s*$/, '');
+  if(!queries.includes(s)) queries.push(s);
+  s = s.replace(/[-の]?\d+\s*$/, '');
+  if(!queries.includes(s)) queries.push(s);
+  s = s.replace(/\d+丁目?/, '').trim();
+  if(s && !queries.includes(s)) queries.push(s);
+  return queries;
+}
+
+async function geocodeGSI(query){
+  const url = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(query);
+  const res = await fetch(url);
+  if(!res.ok) return null;
+  const data = await res.json();
+  if(!data || !data.length) return null;
+  const coords = data[0].geometry.coordinates;
+  return { lat: coords[1], lon: coords[0] };
+}
+
+async function geocodeNominatim(query){
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ja&q=' + encodeURIComponent(query + ', 日本');
+  const res = await fetch(url);
+  if(!res.ok) return null;
+  const data = await res.json();
+  return (data && data.length) ? { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } : null;
+}
+
+async function searchArea(){
+  const q = document.getElementById('areaInput').value.trim();
+  if(!q){ showToast("地域名を入力してください"); return; }
+  const btn = document.getElementById('areaBtn');
+  const original = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try{
+    const norm = normalizeAddress(q);
+    const zoom = detectZoom(norm);
+    const queries = buildQueries(norm);
+    let result = null;
+    for(const query of queries){
+      result = await geocodeGSI(query);
+      if(result) break;
+    }
+    if(!result){
+      result = await geocodeNominatim(norm);
+    }
+    if(!result){
+      showToast("該当する場所が見つかりませんでした");
+      return;
+    }
+    const lat = result.lat;
+    const lon = result.lon;
+    map.flyTo([lat, lon], zoom, { duration: 1.2 });
+    showToast(`「${q}」付近（ズーム${zoom}）`);
+  }catch(e){
+    showToast("地域検索に失敗しました（通信環境をご確認ください）");
+  }finally{
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('searchBtn').onclick = renderMarkers;
+document.getElementById('searchInput').addEventListener('input', renderMarkers);
+document.getElementById('areaBtn').onclick = searchArea;
+document.getElementById('areaInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') searchArea();
+});
+
+(async function init(){
+  buildPayFilterChips();
+  const ok = initFirebase();
+  if(ok) subscribeMachines();
+
+  const TOKYO = [35.6812, 139.7671]; // フォールバック: 東京駅
+  initMap(TOKYO);
+  renderMarkers();
+  tryGeolocateAndCenter();
+})();
+</script>
+</body>
+</html>
