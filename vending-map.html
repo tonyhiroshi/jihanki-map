@@ -211,6 +211,13 @@
     z-index:80;opacity:0;transition:opacity .25s;pointer-events:none;
   }
   .toast.show{opacity:1;}
+  .loc-badge{
+    display:inline-block;
+    padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;margin-top:4px;
+  }
+  .loc-badge.photo{background:#e8f5e9;color:#2e7d32;}
+  .loc-badge.map{background:#fff3e0;color:#e65100;}
+  .btn-continue{background:var(--coin);color:#241a05;}
 </style>
 </head>
 <body>
@@ -292,6 +299,7 @@
     <div class="sheet-actions">
       <button class="btn-cancel" id="cancelBtn">キャンセル</button>
       <button class="btn-save" id="saveBtn">保存する</button>
+      <button class="btn-continue" id="continueBtn">保存して次へ</button>
     </div>
   </div>
 </div>
@@ -308,6 +316,8 @@ const PAY_OPTIONS = ["現金","交通系IC","QRコード決済","クレジット
 let map, markersLayer;
 let machines = [];
 let pendingLatLng = null;
+let pendingSource = 'map';
+let previewMarker = null;
 let editingId = null;
 let selectedProducts = new Set();
 let selectedPays = new Set();
@@ -413,6 +423,34 @@ async function updateMachine(id, data){
   await db.collection('machines').doc(id).set(data, { merge: true });
 }
 
+function showPreviewMarker(lat, lng){
+  removePreviewMarker();
+  previewMarker = L.marker([lat, lng], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="width:18px;height:18px;background:#3aa66b;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);"></div>',
+      iconSize: [18,18],
+      iconAnchor: [9,9]
+    })
+  }).addTo(map);
+}
+
+function removePreviewMarker(){
+  if(previewMarker){ map.removeLayer(previewMarker); previewMarker = null; }
+}
+
+function updateLocationHint(){
+  const hint = document.getElementById('sheetHint');
+  if(!pendingLatLng){
+    hint.innerHTML = 'マップをタップして位置を指定してください';
+    return;
+  }
+  const badge = pendingSource === 'photo'
+    ? '<span class="loc-badge photo">📷 写真の撮影地点</span>'
+    : '<span class="loc-badge map">📍 地図で指定</span>';
+  hint.innerHTML = `${badge} ${pendingLatLng.lat.toFixed(6)}, ${pendingLatLng.lng.toFixed(6)}`;
+}
+
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -444,6 +482,8 @@ function initMap(center){
 
   map.on('click', (e)=>{
     pendingLatLng = e.latlng;
+    pendingSource = 'map';
+    showPreviewMarker(e.latlng.lat, e.latlng.lng);
     openSheet(null);
   });
 
@@ -708,10 +748,11 @@ document.getElementById('photoInput').addEventListener('change', async (e)=>{
     const gps = await readExifGPS(file);
     if(gps){
       pendingLatLng = L.latLng(gps.lat, gps.lon);
+      pendingSource = 'photo';
+      showPreviewMarker(gps.lat, gps.lon);
       map.flyTo([gps.lat, gps.lon], 19, { duration: 1.0 });
-      document.getElementById('sheetHint').textContent =
-        `📍 写真の位置情報から自動設定: ${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}`;
-      showToast("📍 写真から位置情報を取得しました");
+      updateLocationHint();
+      showToast("📷 写真の撮影地点を取得しました");
     } else {
       showToast("⚠ 写真に位置情報がありません。地図タップで位置を指定してください");
     }
@@ -758,12 +799,17 @@ function openSheet(machine){
   document.getElementById('makerSelect').value = machine ? machine.maker : "コカ・コーラ";
   document.getElementById('noteInput').value = machine ? (machine.note||'') : '';
   document.getElementById('sheetTitle').textContent = machine ? '自販機情報を更新' : '自販機を登録';
-  document.getElementById('sheetHint').textContent = machine
-    ? '商品ラインナップや決済方法の変更を反映できます'
-    : (pendingLatLng ? `登録位置: ${pendingLatLng.lat.toFixed(5)}, ${pendingLatLng.lng.toFixed(5)}` : 'マップをタップして位置を指定してください');
+  document.getElementById('continueBtn').style.display = machine ? 'none' : 'block';
+
+  if(machine){
+    pendingLatLng = L.latLng(machine.lat, machine.lng);
+    pendingSource = 'map';
+    document.getElementById('sheetHint').textContent = '商品ラインナップや決済方法の変更を反映できます';
+  } else {
+    updateLocationHint();
+  }
 
   buildTagOptions();
-  // re-apply selection state visuals
   document.querySelectorAll('#productTags .tagopt').forEach(el=>{
     if(selectedProducts.has(el.textContent)) el.classList.add('sel');
   });
@@ -771,18 +817,19 @@ function openSheet(machine){
     if(selectedPays.has(el.textContent)) el.classList.add('sel');
   });
 
-  if(machine) pendingLatLng = L.latLng(machine.lat, machine.lng);
   document.getElementById('overlay').classList.add('show');
 }
 
 function closeSheet(){
   document.getElementById('overlay').classList.remove('show');
+  removePreviewMarker();
   pendingLatLng = null;
+  pendingSource = 'map';
   editingId = null;
   currentPhotos = [];
 }
 
-async function saveSheet(){
+async function saveSheet(continueNext){
   if(!pendingLatLng){
     showToast("位置が未設定です。マップをタップしてください");
     return;
@@ -805,7 +852,9 @@ async function saveSheet(){
   };
 
   const saveBtn = document.getElementById('saveBtn');
+  const contBtn = document.getElementById('continueBtn');
   saveBtn.disabled = true;
+  contBtn.disabled = true;
   saveBtn.textContent = '保存中...';
   try{
     if(editingId){
@@ -813,13 +862,20 @@ async function saveSheet(){
     } else {
       await createMachine(payload);
     }
-    closeSheet();
-    showToast("保存しました");
+    if(continueNext){
+      closeSheet();
+      showToast("保存しました。次の写真を選んでください");
+      setTimeout(()=> document.getElementById('photoFabInput').click(), 400);
+    } else {
+      closeSheet();
+      showToast("保存しました");
+    }
   }catch(e){
     console.error(e);
     showToast("保存に失敗しました（通信/Firestoreルールをご確認ください）");
   }finally{
     saveBtn.disabled = false;
+    contBtn.disabled = false;
     saveBtn.textContent = '保存する';
   }
 }
@@ -843,8 +899,8 @@ function locateMe(){
 
 document.getElementById('addBtn').onclick = ()=>{
   if(!pendingLatLng){
-    const c = map.getCenter();
-    pendingLatLng = c;
+    pendingLatLng = map.getCenter();
+    pendingSource = 'map';
   }
   openSheet(null);
 };
@@ -858,26 +914,26 @@ document.getElementById('photoFabInput').addEventListener('change', async (e)=>{
     const gps = await readExifGPS(file);
     if(gps){
       pendingLatLng = L.latLng(gps.lat, gps.lon);
+      pendingSource = 'photo';
+      showPreviewMarker(gps.lat, gps.lon);
       map.flyTo([gps.lat, gps.lon], 19, { duration: 1.0 });
     } else {
-      const c = map.getCenter();
-      pendingLatLng = c;
-      showToast("位置情報がありません。現在の地図中心で登録します");
+      pendingLatLng = map.getCenter();
+      pendingSource = 'map';
+      showToast("⚠ 位置情報がありません。地図タップで位置を指定してください");
     }
     const dataUrl = await compressImage(file);
     currentPhotos = [dataUrl];
     openSheet(null);
     renderPhotoRow();
-    if(gps){
-      document.getElementById('sheetHint').textContent =
-        `📍 写真の位置情報から自動設定: ${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}`;
-    }
+    updateLocationHint();
   }catch(err){
     showToast("写真の処理に失敗しました");
   }
 });
 document.getElementById('cancelBtn').onclick = closeSheet;
-document.getElementById('saveBtn').onclick = saveSheet;
+document.getElementById('saveBtn').onclick = ()=> saveSheet(false);
+document.getElementById('continueBtn').onclick = ()=> saveSheet(true);
 function normalizeAddress(q){
   return q
     .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
