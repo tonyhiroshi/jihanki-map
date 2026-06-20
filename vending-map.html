@@ -382,6 +382,25 @@ async function createMachine(data){
   await db.collection('machines').add(data);
 }
 
+async function deleteMachine(id){
+  if(useLocal){
+    machines = machines.filter(m=>m.id!==id);
+    saveLocal(machines);
+    renderMarkers();
+    map.closePopup();
+    showToast("削除しました");
+    return;
+  }
+  if(!db) return;
+  try{
+    await db.collection('machines').doc(id).delete();
+    map.closePopup();
+    showToast("削除しました");
+  }catch(e){
+    showToast("削除に失敗しました");
+  }
+}
+
 async function updateMachine(id, data){
   if(useLocal){
     const idx = machines.findIndex(m=>m.id===id);
@@ -503,14 +522,19 @@ function renderMarkers(){
       <div style="font-size:12px;color:#777;margin-bottom:6px;">決済: ${(m.pays||[]).map(escapeHtml).join('・') || '不明'}</div>
       ${m.note ? `<div style="font-size:12px;color:#777;margin-bottom:6px;">📝 ${escapeHtml(m.note)}</div>` : ''}
       <div style="font-size:11px;color:#a8a8a8;margin-bottom:8px;">更新: ${timeAgo(m.updatedAt)}</div>
-      <button data-id="${m.id}" class="editBtn" style="background:#2b3a4a;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">情報を更新</button>
+      <div style="display:flex;gap:6px;">
+        <button data-id="${m.id}" class="editBtn" style="background:#2b3a4a;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;flex:1;">情報を更新</button>
+        <button data-id="${m.id}" class="delBtn" style="background:#c0392b;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">削除</button>
+      </div>
     `;
     marker.bindPopup(html);
     marker.on('popupopen', ()=>{
-      const btn = document.querySelector('.editBtn[data-id="'+m.id+'"]');
-      if(btn){
-        btn.onclick = ()=>{ map.closePopup(); openSheet(m); };
-      }
+      const editB = document.querySelector('.editBtn[data-id="'+m.id+'"]');
+      if(editB) editB.onclick = ()=>{ map.closePopup(); openSheet(m); };
+      const delB = document.querySelector('.delBtn[data-id="'+m.id+'"]');
+      if(delB) delB.onclick = ()=>{
+        if(confirm('この自販機を削除しますか？')) deleteMachine(m.id);
+      };
     });
   });
 }
