@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>自販機マップ | Jihanki Map</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
 <style>
@@ -16,291 +16,374 @@
     --ok:#3aa66b;
     --line:#c9c2ac;
   }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;height:100%;background:var(--ink);font-family:'Segoe UI',-apple-system,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;}
-  body{display:flex;flex-direction:column;height:100vh;overflow:hidden;color:var(--ink);}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--paper);font-family:'Segoe UI',-apple-system,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;color:var(--ink);overflow:hidden;}
+  body{display:flex;flex-direction:column;height:100dvh;}
 
-  /* ---- Header ---- */
-  header{
+  /* ---- Screens ---- */
+  .screen{display:none;flex-direction:column;height:100%;width:100%;position:absolute;inset:0;z-index:1;background:var(--paper);}
+  .screen.active{display:flex;z-index:2;}
+
+  /* ---- Home Screen ---- */
+  #homeScreen .home-header{
     background:linear-gradient(180deg,var(--steel) 0%,var(--steel-deep) 100%);
     color:var(--paper);
-    padding:14px 16px 12px;
-    position:relative;
-    z-index:30;
+    padding:20px 16px 16px;
+    flex-shrink:0;
     box-shadow:0 3px 10px rgba(0,0,0,.35);
-    flex-shrink:0;
+    position:relative;z-index:10;
   }
-  header h1{
-    margin:0;
-    font-size:19px;
-    font-weight:800;
-    letter-spacing:.5px;
-    display:flex;
-    align-items:center;
-    gap:8px;
+  #homeScreen .home-header h1{
+    font-size:20px;font-weight:800;letter-spacing:.5px;
+    display:flex;align-items:center;gap:8px;
   }
-  header h1 .dot{
+  #homeScreen .home-header h1 .dot{
     width:9px;height:9px;border-radius:50%;
-    background:var(--neon);
-    box-shadow:0 0 8px var(--neon);
-    flex-shrink:0;
+    background:var(--neon);box-shadow:0 0 8px var(--neon);flex-shrink:0;
   }
-  header .sub{font-size:11px;opacity:.65;margin-top:2px;letter-spacing:.5px;}
+  #homeScreen .home-header .sub{font-size:11px;opacity:.65;margin-top:3px;letter-spacing:.5px;}
+  .register-btn{
+    display:block;width:100%;margin-top:14px;
+    background:var(--neon);color:#fff;border:none;border-radius:12px;
+    padding:14px;font-size:15px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 12px rgba(255,90,60,.4);
+    letter-spacing:.5px;
+  }
+  .register-btn:active{opacity:.85;}
+  .mode-label{font-size:10px;opacity:.5;margin-top:6px;text-align:center;}
 
-  /* ---- Search bar ---- */
-  .searchbar{
-    margin-top:10px;
+  .card-list{
+    flex:1;overflow-y:auto;padding:12px 16px 80px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .card-list-title{font-size:13px;font-weight:700;color:var(--steel);margin-bottom:10px;letter-spacing:.3px;}
+  .empty-msg{
+    text-align:center;padding:48px 20px;color:#8a7e6a;font-size:14px;line-height:1.7;
+  }
+  .vm-card{
+    display:flex;gap:12px;background:#fff;border-radius:14px;padding:12px;
+    margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);
+    cursor:pointer;border:1px solid rgba(0,0,0,.04);
+    transition:box-shadow .15s;
+  }
+  .vm-card:active{box-shadow:0 2px 12px rgba(0,0,0,.12);}
+  .vm-card-photo{
+    width:72px;height:72px;border-radius:10px;overflow:hidden;flex-shrink:0;
+    background:#e7e1d0;display:flex;align-items:center;justify-content:center;
+    font-size:28px;color:#b8ad96;
+  }
+  .vm-card-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+  .vm-card-info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;}
+  .vm-card-maker{font-size:14px;font-weight:700;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .vm-card-dist{font-size:12px;color:var(--neon);font-weight:700;margin-bottom:3px;}
+  .vm-card-products{font-size:11px;color:#7a6e58;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* ---- Detail Modal ---- */
+  .detail-overlay{
+    position:fixed;inset:0;background:var(--paper);z-index:50;
+    display:none;flex-direction:column;overflow:hidden;
+  }
+  .detail-overlay.show{display:flex;}
+  .detail-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 16px;flex-shrink:0;
+    background:linear-gradient(180deg,var(--steel) 0%,var(--steel-deep) 100%);
+    color:var(--paper);
+  }
+  .detail-header .detail-title{font-size:16px;font-weight:700;}
+  .detail-header button{background:none;border:none;color:var(--paper);font-size:14px;cursor:pointer;padding:6px 10px;border-radius:8px;}
+  .detail-header button:active{background:rgba(255,255,255,.1);}
+  .detail-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .detail-photos{
+    width:100%;height:280px;background:#1a1a1a;position:relative;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .detail-photos .swipe-container{
+    display:flex;width:100%;height:100%;transition:transform .3s ease;
+  }
+  .detail-photos .swipe-slide{
+    min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  }
+  .detail-photos .swipe-slide img{max-width:100%;max-height:100%;object-fit:contain;}
+  .detail-photos .no-photo{color:#666;font-size:48px;}
+  .detail-photos .photo-dots{
+    position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
     display:flex;gap:6px;
   }
-  .searchbar input{
-    flex:1;
-    background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.18);
-    border-radius:10px;
-    padding:9px 12px;
+  .detail-photos .photo-dots span{
+    width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.4);
+  }
+  .detail-photos .photo-dots span.active{background:#fff;}
+  .detail-info{padding:18px 16px 100px;}
+  .detail-info .d-maker{font-size:18px;font-weight:800;margin-bottom:12px;}
+  .detail-info .d-section{margin-bottom:14px;}
+  .detail-info .d-label{font-size:11px;font-weight:700;color:var(--steel);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+  .detail-info .d-tags{display:flex;flex-wrap:wrap;gap:6px;}
+  .detail-info .d-tag{
+    background:#fff;border:1px solid var(--line);border-radius:999px;
+    padding:5px 11px;font-size:12px;color:var(--ink);
+  }
+  .detail-info .d-note{font-size:13px;color:#555;line-height:1.6;margin-top:4px;}
+  .detail-info .d-updated{font-size:11px;color:#aaa;margin-top:6px;}
+  .detail-actions{
+    position:fixed;bottom:0;left:0;right:0;z-index:55;
+    padding:12px 16px;display:flex;gap:10px;
+    background:var(--paper);border-top:1px solid var(--line);
+    display:none;
+  }
+  .detail-overlay.show .detail-actions{display:flex;}
+  .detail-actions button{
+    flex:1;padding:13px;border-radius:12px;font-size:14px;font-weight:700;border:none;cursor:pointer;
+  }
+  .btn-navigate{background:var(--ok);color:#fff;}
+  .btn-delete{background:var(--neon);color:#fff;}
+  .btn-close-detail{background:#e7e1d0;color:#4a4233;}
+
+  /* ---- Registration Screen ---- */
+  #regScreen{background:var(--paper);}
+  .reg-header{
+    display:flex;align-items:center;gap:12px;
+    padding:14px 16px;flex-shrink:0;
+    background:linear-gradient(180deg,var(--steel) 0%,var(--steel-deep) 100%);
     color:var(--paper);
-    font-size:14px;
-    outline:none;
   }
-  .searchbar input::placeholder{color:rgba(243,239,228,.45);}
-  .searchbar button{
-    background:var(--coin);
-    border:none;
-    border-radius:10px;
-    padding:0 14px;
-    font-weight:700;
-    color:#241a05;
-    font-size:13px;
-    cursor:pointer;
+  .reg-header button{background:none;border:none;color:var(--paper);font-size:14px;cursor:pointer;padding:6px 10px;border-radius:8px;}
+  .reg-header .reg-title{font-size:16px;font-weight:700;flex:1;}
+  .reg-steps{display:flex;gap:0;padding:0 16px;background:var(--steel-deep);padding-bottom:10px;}
+  .reg-step-indicator{
+    flex:1;text-align:center;font-size:11px;color:rgba(255,255,255,.4);
+    padding:6px 0;border-bottom:3px solid rgba(255,255,255,.1);
+    font-weight:600;
   }
+  .reg-step-indicator.active{color:var(--coin);border-bottom-color:var(--coin);}
+  .reg-step-indicator.done{color:rgba(255,255,255,.7);border-bottom-color:var(--ok);}
 
-  .filters{
-    display:flex;
-    gap:6px;
-    margin-top:8px;
-    overflow-x:auto;
-    padding-bottom:2px;
-    -ms-overflow-style:none;scrollbar-width:none;
-  }
-  .filters::-webkit-scrollbar{display:none;}
-  .chip{
-    flex-shrink:0;
-    background:rgba(255,255,255,.07);
-    border:1px solid rgba(255,255,255,.2);
-    color:var(--paper);
-    border-radius:999px;
-    padding:6px 12px;
-    font-size:12px;
-    cursor:pointer;
-    white-space:nowrap;
-    transition:.15s;
-  }
-  .chip.active{background:var(--coin);color:#241a05;border-color:var(--coin);font-weight:700;}
+  .reg-body{flex:1;overflow:hidden;display:flex;flex-direction:column;}
 
-  /* ---- Map ---- */
-  #map{flex:1;width:100%;min-height:300px;position:relative;z-index:1;background:#dde3e8;}
-  .leaflet-popup-content-wrapper{border-radius:12px;}
-  .leaflet-popup-content{margin:12px 14px;font-size:13px;min-width:200px;}
+  /* Step 1: Map */
+  .reg-map-step{flex:1;display:none;flex-direction:column;}
+  .reg-map-step.active{display:flex;}
+  .reg-map-instruction{
+    padding:10px 16px;background:rgba(212,161,58,.1);font-size:13px;color:#8a6c1e;
+    text-align:center;font-weight:600;flex-shrink:0;
+  }
+  #regMap{flex:1;width:100%;min-height:200px;z-index:1;}
+  .reg-map-bottom{
+    padding:12px 16px;flex-shrink:0;display:flex;gap:10px;align-items:center;
+    background:var(--paper);border-top:1px solid var(--line);
+  }
+  .reg-map-bottom .coord-text{flex:1;font-size:12px;color:#7a6e58;}
+  .reg-next-btn{
+    background:var(--coin);color:#241a05;border:none;border-radius:10px;
+    padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;
+  }
+  .reg-next-btn:disabled{opacity:.4;cursor:default;}
 
-  /* ---- FAB ---- */
-  .fab{
-    position:absolute;
-    right:16px;
-    bottom:96px;
-    width:54px;height:54px;
-    border-radius:50%;
-    background:var(--neon);
-    color:#fff;
-    border:none;
-    font-size:28px;
-    line-height:54px;
-    text-align:center;
-    box-shadow:0 6px 16px rgba(255,90,60,.45);
-    z-index:20;
-    cursor:pointer;
+  /* Step 2: Photo */
+  .reg-photo-step{flex:1;display:none;flex-direction:column;padding:20px 16px;}
+  .reg-photo-step.active{display:flex;}
+  .reg-photo-step .photo-preview{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    background:#e7e1d0;border-radius:14px;overflow:hidden;margin-bottom:14px;min-height:200px;
   }
-  .fab.locate{
-    bottom:224px;
-    background:var(--steel);
-    font-size:20px;
-    box-shadow:0 6px 16px rgba(0,0,0,.35);
+  .reg-photo-step .photo-preview img{max-width:100%;max-height:100%;object-fit:contain;}
+  .reg-photo-step .photo-preview .placeholder{color:#b8ad96;font-size:14px;text-align:center;padding:20px;}
+  .photo-btns{display:flex;gap:10px;margin-bottom:14px;flex-shrink:0;}
+  .photo-btns label,.photo-btns button{
+    flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:700;
+    text-align:center;cursor:pointer;border:1px dashed var(--line);background:#fff;color:var(--ink);
   }
-  .fab.photo{
-    bottom:160px;
-    background:var(--coin);
-    font-size:20px;
-    box-shadow:0 6px 16px rgba(212,161,58,.45);
-    display:flex;align-items:center;justify-content:center;
-    cursor:pointer;
+  .photo-btns label:active,.photo-btns button:active{background:#f0ece2;}
+  .photo-thumbs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;flex-shrink:0;}
+  .photo-thumbs .pt{
+    position:relative;width:60px;height:60px;border-radius:8px;overflow:hidden;border:1px solid var(--line);
   }
-  .fab.switchmap{
-    bottom:288px;
-    background:var(--steel);
-    font-size:20px;
-    box-shadow:0 6px 16px rgba(0,0,0,.35);
+  .photo-thumbs .pt img{width:100%;height:100%;object-fit:cover;}
+  .photo-thumbs .pt .pt-rm{
+    position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
+    background:rgba(20,20,20,.7);color:#fff;border:none;font-size:10px;
+    line-height:18px;text-align:center;cursor:pointer;padding:0;
   }
+  .reg-photo-bottom{flex-shrink:0;display:flex;gap:10px;}
+  .reg-photo-bottom button{
+    flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;
+  }
+  .btn-back{background:#e7e1d0;color:#4a4233;}
 
-  /* ---- Bottom result count strip ---- */
-  .strip{
-    background:var(--paper);
-    border-top:1px solid var(--line);
-    padding:8px 16px;
-    font-size:12px;
-    color:#54493a;
-    flex-shrink:0;
-    z-index:25;
-    display:flex;justify-content:space-between;align-items:center;
-  }
-  .strip b{color:var(--ink);}
-
-  /* ---- Modal (add / edit) ---- */
-  .overlay{
-    position:fixed;inset:0;background:rgba(10,12,16,.55);
-    display:none;align-items:flex-end;justify-content:center;z-index:50;
-  }
-  .overlay.show{display:flex;}
-  .sheet{
-    background:var(--paper);
-    width:100%;
-    max-width:480px;
-    border-radius:18px 18px 0 0;
-    padding:18px 18px 22px;
-    max-height:88vh;
-    overflow-y:auto;
-    animation:up .18s ease-out;
-  }
-  @keyframes up{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
-  .sheet h2{margin:0 0 2px;font-size:17px;}
-  .sheet .hint{font-size:12px;color:#7a6e58;margin-bottom:14px;}
-  .field{margin-bottom:14px;}
+  /* Step 3: Details Form */
+  .reg-form-step{flex:1;display:none;flex-direction:column;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
+  .reg-form-step.active{display:flex;}
+  .field{margin-bottom:16px;}
   .field label{display:block;font-size:12px;font-weight:700;color:var(--steel-deep);margin-bottom:6px;letter-spacing:.3px;}
   .field select,.field input[type=text]{
     width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:#fff;
+    -webkit-appearance:none;
   }
-  .tagrow,.payrow{display:flex;flex-wrap:wrap;gap:6px;}
+  .tagrow{display:flex;flex-wrap:wrap;gap:6px;}
   .tagopt{
     border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;cursor:pointer;
+    user-select:none;-webkit-user-select:none;
   }
   .tagopt.sel{background:var(--steel);color:#fff;border-color:var(--steel);}
-  .sheet-actions{display:flex;gap:10px;margin-top:18px;}
-  .sheet-actions button{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;}
-  .btn-cancel{background:#e7e1d0;color:#4a4233;}
+  .reg-form-actions{display:flex;gap:10px;margin-top:10px;padding-bottom:20px;flex-shrink:0;}
+  .reg-form-actions button{flex:1;padding:13px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;}
   .btn-save{background:var(--ok);color:#fff;}
 
-  .photoRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
-  .photoThumb{
-    position:relative;width:72px;height:72px;border-radius:10px;overflow:hidden;border:1px solid var(--line);
+  /* ---- Navigation Screen ---- */
+  #navScreen{background:var(--ink);}
+  .nav-header{
+    display:flex;align-items:center;gap:12px;
+    padding:14px 16px;flex-shrink:0;
+    background:linear-gradient(180deg,var(--steel) 0%,var(--steel-deep) 100%);
+    color:var(--paper);z-index:10;position:relative;
   }
-  .photoThumb img{width:100%;height:100%;object-fit:cover;display:block;}
-  .photoThumb .rm{
-    position:absolute;top:2px;right:2px;background:rgba(20,20,20,.7);color:#fff;
-    width:20px;height:20px;border-radius:50%;border:none;font-size:12px;line-height:20px;text-align:center;cursor:pointer;padding:0;
+  .nav-header button{background:none;border:none;color:var(--paper);font-size:14px;cursor:pointer;padding:6px 10px;border-radius:8px;}
+  .nav-header .nav-title{font-size:16px;font-weight:700;flex:1;}
+  #navMap{flex:1;width:100%;z-index:1;}
+  .nav-bottom{
+    padding:12px 16px;flex-shrink:0;background:var(--paper);border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;z-index:10;position:relative;
   }
-  .photoAddBtn{
-    display:inline-flex;align-items:center;gap:6px;
-    background:#fff;border:1px dashed var(--line);border-radius:10px;
-    padding:9px 14px;font-size:13px;color:#54493a;cursor:pointer;
+  .nav-bottom .nav-dest{flex:1;font-size:13px;font-weight:600;color:var(--ink);}
+  .nav-bottom .nav-dist{font-size:14px;font-weight:700;color:var(--neon);}
+  .fab-switchmap{
+    position:absolute;right:16px;bottom:80px;width:44px;height:44px;border-radius:50%;
+    background:var(--steel);color:#fff;border:none;font-size:18px;line-height:44px;
+    text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.35);z-index:10;cursor:pointer;
   }
 
-  .popupPhotos{display:flex;gap:5px;margin-bottom:8px;overflow-x:auto;}
-  .popupPhotos img{width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;}
-
+  /* ---- Toast ---- */
   .toast{
     position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
     background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;
-    z-index:80;opacity:0;transition:opacity .25s;pointer-events:none;
+    z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;
+    max-width:90vw;overflow:hidden;text-overflow:ellipsis;
   }
   .toast.show{opacity:1;}
-  .loc-badge{
-    display:inline-block;
-    padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;margin-top:4px;
-  }
-  .loc-badge.photo{background:#e8f5e9;color:#2e7d32;}
-  .loc-badge.map{background:#fff3e0;color:#e65100;}
-  .btn-continue{background:var(--coin);color:#241a05;}
+
+  /* Leaflet overrides */
+  .leaflet-popup-content-wrapper{border-radius:12px;}
+  .leaflet-popup-content{margin:12px 14px;font-size:13px;}
 </style>
 </head>
 <body>
 
-<header>
-  <h1><span class="dot"></span>自販機マップ</h1>
-  <div class="sub">みんなで登録・更新するご近所の自販機データベース</div>
-  <div class="searchbar">
-    <input id="searchInput" type="text" placeholder="商品名・メーカーで検索（例: 炭酸, コカコーラ）">
-    <button id="searchBtn">検索</button>
+<!-- ===== Screen 1: Home ===== -->
+<div class="screen active" id="homeScreen">
+  <div class="home-header">
+    <h1><span class="dot"></span>自販機マップ</h1>
+    <div class="sub">みんなで登録・更新するご近所の自販機データベース</div>
+    <button class="register-btn" id="startRegBtn">自販機を新規登録</button>
+    <div class="mode-label" id="modeLabel"></div>
   </div>
-  <div class="searchbar" style="margin-top:6px;">
-    <input id="areaInput" type="text" placeholder="地域で探す（例: 渋谷区, 新宿駅, 大田区）">
-    <button id="areaBtn">移動</button>
+  <div class="card-list" id="cardList">
+    <div class="card-list-title" id="cardListTitle">近くの自販機</div>
+    <div id="cardsContainer"></div>
   </div>
-  <div class="filters" id="payFilters"></div>
-</header>
-
-<div id="map"></div>
-
-<button class="fab switchmap" id="switchMapBtn" title="地図を切り替え">🗺</button>
-<button class="fab locate" id="locateBtn" title="現在地に移動">📍</button>
-<label class="fab photo" id="photoFab" title="写真から登録">📷
-  <input type="file" id="photoFabInput" accept="image/*" style="display:none;">
-</label>
-<button class="fab" id="addBtn" title="自販機を登録">＋</button>
-
-<div class="strip">
-  <span>表示中: <b id="countLabel">0</b> 件</span>
-  <span id="modeLabel" style="color:#a8472f;font-weight:700;"></span>
 </div>
 
-<!-- Add / Edit sheet -->
-<div class="overlay" id="overlay">
-  <div class="sheet">
-    <h2 id="sheetTitle">自販機を登録</h2>
-    <div class="hint" id="sheetHint">マップ上の位置をタップしてから入力してください</div>
+<!-- ===== Detail Modal ===== -->
+<div class="detail-overlay" id="detailOverlay">
+  <div class="detail-header">
+    <span class="detail-title" id="detailTitle">詳細</span>
+    <button id="detailCloseBtn">閉じる</button>
+  </div>
+  <div class="detail-body">
+    <div class="detail-photos" id="detailPhotos"></div>
+    <div class="detail-info" id="detailInfo"></div>
+  </div>
+  <div class="detail-actions">
+    <button class="btn-navigate" id="detailNavBtn">ここへ行く</button>
+    <button class="btn-delete" id="detailDeleteBtn">削除</button>
+    <button class="btn-close-detail" id="detailCloseBtn2">閉じる</button>
+  </div>
+</div>
 
-    <div class="field">
-      <label>メーカー</label>
-      <select id="makerSelect">
-        <option>コカ・コーラ</option>
-        <option>サントリー</option>
-        <option>アサヒ飲料</option>
-        <option>ダイドードリンコ</option>
-        <option>伊藤園</option>
-        <option>JR東日本ウォーターズ</option>
-        <option>キリン ビバレッジ</option>
-        <option>ポッカサッポロ</option>
-        <option>その他</option>
-      </select>
+<!-- ===== Screen 2: Registration ===== -->
+<div class="screen" id="regScreen">
+  <div class="reg-header">
+    <button id="regBackBtn">戻る</button>
+    <span class="reg-title">自販機を登録</span>
+  </div>
+  <div class="reg-steps">
+    <div class="reg-step-indicator" id="regStep1Ind">1. 位置</div>
+    <div class="reg-step-indicator" id="regStep2Ind">2. 写真</div>
+    <div class="reg-step-indicator" id="regStep3Ind">3. 情報</div>
+  </div>
+  <div class="reg-body">
+    <!-- Step 1: Map -->
+    <div class="reg-map-step" id="regMapStep">
+      <div class="reg-map-instruction">位置を地図上でタップしてください</div>
+      <div id="regMap"></div>
+      <div class="reg-map-bottom">
+        <span class="coord-text" id="regCoordText">未選択</span>
+        <button class="reg-next-btn" id="regMapNextBtn" disabled>次へ</button>
+      </div>
     </div>
+    <!-- Step 2: Photo -->
+    <div class="reg-photo-step" id="regPhotoStep">
+      <div class="photo-preview" id="regPhotoPreview">
+        <div class="placeholder">写真を追加してください（任意）</div>
+      </div>
+      <div class="photo-thumbs" id="regPhotoThumbs"></div>
+      <div class="photo-btns">
+        <label>
+          写真を追加
+          <input type="file" id="regPhotoInput" accept="image/*" style="display:none;">
+        </label>
+      </div>
+      <div class="reg-photo-bottom">
+        <button class="btn-back" id="regPhotoBackBtn">戻る</button>
+        <button class="reg-next-btn" id="regPhotoNextBtn">次へ</button>
+      </div>
+    </div>
+    <!-- Step 3: Form -->
+    <div class="reg-form-step" id="regFormStep">
+      <div class="field">
+        <label>メーカー</label>
+        <select id="regMakerSelect">
+          <option>コカ・コーラ</option>
+          <option>サントリー</option>
+          <option>アサヒ飲料</option>
+          <option>ダイドードリンコ</option>
+          <option>伊藤園</option>
+          <option>JR東日本ウォーターズ</option>
+          <option>キリン ビバレッジ</option>
+          <option>ポッカサッポロ</option>
+          <option>その他</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>商品ラインナップ（複数選択可）</label>
+        <div class="tagrow" id="regProductTags"></div>
+      </div>
+      <div class="field">
+        <label>対応決済方法</label>
+        <div class="tagrow" id="regPayTags"></div>
+      </div>
+      <div class="field">
+        <label>メモ（任意）</label>
+        <input type="text" id="regNoteInput" placeholder="例: 駅の改札横、自転車置き場前 など">
+      </div>
+      <div class="reg-form-actions">
+        <button class="btn-back" id="regFormBackBtn">戻る</button>
+        <button class="btn-save" id="regSaveBtn">保存する</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-    <div class="field">
-      <label>商品ラインナップ（複数選択可）</label>
-      <div class="tagrow" id="productTags"></div>
-    </div>
-
-    <div class="field">
-      <label>対応決済方法</label>
-      <div class="payrow" id="payTags"></div>
-    </div>
-
-    <div class="field">
-      <label>メモ（任意）</label>
-      <input type="text" id="noteInput" placeholder="例: 駅の改札横、自転車置き場前 など">
-    </div>
-
-    <div class="field">
-      <label>写真（最大3枚）</label>
-      <div class="photoRow" id="photoRow"></div>
-      <label class="photoAddBtn" id="photoAddBtn">
-        📷 写真を追加
-        <input type="file" id="photoInput" accept="image/*" style="display:none;">
-      </label>
-      <div class="hint" id="photoHint" style="margin-top:6px;"></div>
-    </div>
-
-    <div class="sheet-actions">
-      <button class="btn-cancel" id="cancelBtn">キャンセル</button>
-      <button class="btn-save" id="saveBtn">保存する</button>
-      <button class="btn-continue" id="continueBtn">保存して次へ</button>
-    </div>
+<!-- ===== Screen 3: Navigation ===== -->
+<div class="screen" id="navScreen">
+  <div class="nav-header">
+    <button id="navBackBtn">戻る</button>
+    <span class="nav-title">ナビゲーション</span>
+  </div>
+  <div id="navMap"></div>
+  <button class="fab-switchmap" id="navSwitchMapBtn" title="地図を切り替え">🗺</button>
+  <div class="nav-bottom">
+    <span class="nav-dest" id="navDest"></span>
+    <span class="nav-dist" id="navDistLabel"></span>
   </div>
 </div>
 
@@ -310,26 +393,44 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+// ============================================================
+// Constants
+// ============================================================
 const PRODUCT_OPTIONS = ["炭酸","お茶","コーヒー","水","スポーツ飲料","ジュース","エナジー系","カップ自販機","アイス","軽食"];
 const PAY_OPTIONS = ["現金","交通系IC","QRコード決済","クレジット(タッチ)","電子マネー"];
-
-let map, markersLayer;
-let machines = [];
-let pendingLatLng = null;
-let pendingSource = 'map';
-let previewMarker = null;
-let editingId = null;
-let selectedProducts = new Set();
-let selectedPays = new Set();
-let activePayFilter = null;
-let currentPhotos = [];
 const MAX_PHOTOS = 3;
+const TOKYO = [35.6812, 139.7671];
 
 // ============================================================
-// Firebase / Firestore 設定
-// 1. https://console.firebase.google.com で新規プロジェクトを作成
-// 2. 「ビルド」→「Firestore Database」を有効化（テストモードでOK、後述のルールに差し替え推奨）
-// 3. プロジェクト概要の「ウェブアプリを追加」で取得した設定値を下に貼り付け
+// State
+// ============================================================
+let machines = [];
+let userLat = null, userLng = null;
+
+// Registration state
+let regLatLng = null;
+let regPhotos = [];
+let regSelectedProducts = new Set();
+let regSelectedPays = new Set();
+let regMap = null;
+let regMarker = null;
+let regStep = 1;
+
+// Navigation state
+let navMap = null;
+let navRouteLine = null;
+let navUserMarker = null;
+let navDestMarker = null;
+let navTileIndex = 0;
+let navActiveTile = null;
+
+// Detail state
+let detailMachine = null;
+let detailPhotoIndex = 0;
+let swipeStartX = 0;
+
+// ============================================================
+// Firebase / Firestore
 // ============================================================
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
@@ -341,31 +442,39 @@ const firebaseConfig = {
 };
 
 let db = null;
-let unsubscribeMachines = null;
-
 let useLocal = false;
 const LS_KEY = 'jihanki_machines';
+let storageAvailable = false;
+
+function checkStorage(){
+  try{
+    const k = '__test__';
+    localStorage.setItem(k, '1');
+    localStorage.removeItem(k);
+    return true;
+  }catch(e){ return false; }
+}
 
 function loadLocal(){
+  if(!storageAvailable) return [];
   try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }catch(e){ return []; }
 }
+
 function saveLocal(list){
+  if(!storageAvailable) return;
   try{
     localStorage.setItem(LS_KEY, JSON.stringify(list));
   }catch(e){
-    if(e.name === 'QuotaExceededError' || e.code === 22){
-      throw new Error('ストレージ容量が不足しています。不要なデータを削除してください');
-    }
-    throw e;
+    console.warn('localStorage save failed:', e);
   }
 }
 
 function initFirebase(){
   if(firebaseConfig.apiKey === "YOUR_API_KEY"){
     useLocal = true;
+    storageAvailable = checkStorage();
     machines = loadLocal();
-    renderMarkers();
-    document.getElementById('modeLabel').textContent = 'ローカル保存モード';
+    document.getElementById('modeLabel').textContent = storageAvailable ? 'ローカル保存モード' : 'メモリ保存モード（閉じると消えます）';
     return false;
   }
   firebase.initializeApp(firebaseConfig);
@@ -375,14 +484,14 @@ function initFirebase(){
 
 function subscribeMachines(){
   if(!db) return;
-  unsubscribeMachines = db.collection('machines').onSnapshot(
+  db.collection('machines').onSnapshot(
     (snapshot)=>{
       machines = snapshot.docs.map(doc=>({ id: doc.id, ...doc.data() }));
-      renderMarkers();
+      renderCardList();
     },
     (err)=>{
       console.error(err);
-      showToast("データ取得に失敗しました（Firestoreの設定/通信をご確認ください）");
+      showToast("データ取得に失敗しました");
     }
   );
 }
@@ -392,7 +501,7 @@ async function createMachine(data){
     data.id = 'local_' + Date.now();
     machines.push(data);
     saveLocal(machines);
-    renderMarkers();
+    renderCardList();
     return;
   }
   if(!db) return;
@@ -403,116 +512,49 @@ async function deleteMachine(id){
   if(useLocal){
     machines = machines.filter(m=>m.id!==id);
     saveLocal(machines);
-    renderMarkers();
-    map.closePopup();
+    renderCardList();
     showToast("削除しました");
     return;
   }
   if(!db) return;
   try{
     await db.collection('machines').doc(id).delete();
-    map.closePopup();
     showToast("削除しました");
   }catch(e){
     showToast("削除に失敗しました");
   }
 }
 
-async function updateMachine(id, data){
-  if(useLocal){
-    const idx = machines.findIndex(m=>m.id===id);
-    if(idx>=0){ machines[idx] = { ...machines[idx], ...data }; }
-    saveLocal(machines);
-    renderMarkers();
-    return;
-  }
-  if(!db) return;
-  await db.collection('machines').doc(id).set(data, { merge: true });
-}
-
-function showPreviewMarker(lat, lng){
-  removePreviewMarker();
-  previewMarker = L.marker([lat, lng], {
-    icon: L.divIcon({
-      className: '',
-      html: '<div style="width:18px;height:18px;background:#3aa66b;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);"></div>',
-      iconSize: [18,18],
-      iconAnchor: [9,9]
-    })
-  }).addTo(map);
-}
-
-function removePreviewMarker(){
-  if(previewMarker){ map.removeLayer(previewMarker); previewMarker = null; }
-}
-
-function updateLocationHint(){
-  const hint = document.getElementById('sheetHint');
-  if(!pendingLatLng){
-    hint.innerHTML = 'マップをタップして位置を指定してください';
-    return;
-  }
-  const badge = pendingSource === 'photo'
-    ? '<span class="loc-badge photo">📷 写真の撮影地点</span>'
-    : '<span class="loc-badge map">📍 地図で指定</span>';
-  hint.innerHTML = `${badge} ${pendingLatLng.lat.toFixed(6)}, ${pendingLatLng.lng.toFixed(6)}`;
-}
-
+// ============================================================
+// Utility
+// ============================================================
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 2000);
+  setTimeout(()=>t.classList.remove('show'), 2200);
 }
 
-let currentTileIndex = 0;
-const TILE_LAYERS = [
-  { name:'標準地図', url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom:19, attr:'&copy; OpenStreetMap contributors' },
-  { name:'航空写真', url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom:18, attr:'&copy; Esri' },
-  { name:'地形図',   url:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', maxZoom:17, attr:'&copy; OpenTopoMap' }
-];
-let activeTile = null;
-
-function switchTileLayer(){
-  currentTileIndex = (currentTileIndex + 1) % TILE_LAYERS.length;
-  const t = TILE_LAYERS[currentTileIndex];
-  if(activeTile) map.removeLayer(activeTile);
-  activeTile = L.tileLayer(t.url, { maxZoom:t.maxZoom, attribution:t.attr }).addTo(map);
-  showToast('🗺 ' + t.name);
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function initMap(center){
-  map = L.map('map', {zoomControl:true, maxZoom:19}).setView(center, 16);
-  const t = TILE_LAYERS[0];
-  activeTile = L.tileLayer(t.url, { maxZoom:t.maxZoom, attribution:t.attr }).addTo(map);
-  markersLayer = L.layerGroup().addTo(map);
-
-  map.on('click', (e)=>{
-    pendingLatLng = e.latlng;
-    pendingSource = 'map';
-    showPreviewMarker(e.latlng.lat, e.latlng.lng);
-    openSheet(null);
-  });
-
-  // レイアウト確定後にサイズを再計算（コンテナが0pxで初期化された場合の保険）
-  setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} }, 150);
-  window.addEventListener('resize', ()=>{ try{ map.invalidateSize(); }catch(e){} });
+function haversineDistance(lat1, lng1, lat2, lng2){
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function tryGeolocateAndCenter(){
-  if(!navigator.geolocation) return;
-  try{
-    navigator.geolocation.getCurrentPosition(
-      pos => { try{ map.setView([pos.coords.latitude, pos.coords.longitude], 16); }catch(e){} },
-      () => { /* 拒否・失敗時は東京駅の表示のまま */ },
-      {timeout:5000, maximumAge:60000}
-    );
-  }catch(e){
-    /* Permissions-Policyでブロックされる場合などはここに来る。地図は既に表示済みなので無視してOK */
-  }
+function formatDistance(meters){
+  if(meters < 1000) return Math.round(meters) + 'm';
+  return (meters / 1000).toFixed(1) + 'km';
 }
 
 function timeAgo(ts){
+  if(!ts) return '';
   const diff = Date.now() - ts;
   const min = Math.floor(diff/60000);
   if(min < 1) return "たった今";
@@ -524,72 +566,23 @@ function timeAgo(ts){
   return new Date(ts).toLocaleDateString('ja-JP');
 }
 
-function buildPayFilterChips(){
-  const wrap = document.getElementById('payFilters');
-  wrap.innerHTML = '';
-  PAY_OPTIONS.forEach(p=>{
-    const c = document.createElement('div');
-    c.className = 'chip' + (activePayFilter===p ? ' active' : '');
-    c.textContent = p;
-    c.onclick = ()=>{
-      activePayFilter = (activePayFilter===p) ? null : p;
-      buildPayFilterChips();
-      renderMarkers();
-    };
-    wrap.appendChild(c);
-  });
+// ============================================================
+// Tile Layers
+// ============================================================
+const TILE_LAYERS = [
+  { name:'標準地図', url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom:19, attr:'&copy; OpenStreetMap contributors' },
+  { name:'航空写真', url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom:18, attr:'&copy; Esri' },
+  { name:'地形図',   url:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', maxZoom:17, attr:'&copy; OpenTopoMap' }
+];
+
+function addTileLayer(map, idx){
+  const t = TILE_LAYERS[idx];
+  return L.tileLayer(t.url, { maxZoom:t.maxZoom, attribution:t.attr }).addTo(map);
 }
 
-function matchesFilter(m, query){
-  if(activePayFilter && !(m.pays||[]).includes(activePayFilter)) return false;
-  if(!query) return true;
-  const hay = (m.maker + ' ' + (m.products||[]).join(' ') + ' ' + (m.note||'')).toLowerCase();
-  return hay.includes(query.toLowerCase());
-}
-
-function renderMarkers(){
-  markersLayer.clearLayers();
-  const query = document.getElementById('searchInput').value.trim();
-  const filtered = machines.filter(m=>matchesFilter(m, query));
-  document.getElementById('countLabel').textContent = filtered.length;
-
-  filtered.forEach(m=>{
-    const marker = L.circleMarker([m.lat, m.lng], {
-      radius: 9,
-      color:'#1a2530',
-      weight:2,
-      fillColor:'#ff5a3c',
-      fillOpacity:0.9
-    }).addTo(markersLayer);
-
-    const html = `
-      <div style="font-weight:700;font-size:14px;margin-bottom:4px;">${escapeHtml(m.maker)}</div>
-      ${(m.photos&&m.photos.length) ? `<div class="popupPhotos">${m.photos.map(p=>`<img src="${p}">`).join('')}</div>` : ''}
-      <div style="color:#555;margin-bottom:6px;">${(m.products||[]).map(escapeHtml).join(' / ') || '（商品情報なし）'}</div>
-      <div style="font-size:12px;color:#777;margin-bottom:6px;">決済: ${(m.pays||[]).map(escapeHtml).join('・') || '不明'}</div>
-      ${m.note ? `<div style="font-size:12px;color:#777;margin-bottom:6px;">📝 ${escapeHtml(m.note)}</div>` : ''}
-      <div style="font-size:11px;color:#a8a8a8;margin-bottom:8px;">更新: ${timeAgo(m.updatedAt)}</div>
-      <div style="display:flex;gap:6px;">
-        <button data-id="${m.id}" class="editBtn" style="background:#2b3a4a;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;flex:1;">情報を更新</button>
-        <button data-id="${m.id}" class="delBtn" style="background:#c0392b;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">削除</button>
-      </div>
-    `;
-    marker.bindPopup(html);
-    marker.on('popupopen', ()=>{
-      const editB = document.querySelector('.editBtn[data-id="'+m.id+'"]');
-      if(editB) editB.onclick = ()=>{ map.closePopup(); openSheet(m); };
-      const delB = document.querySelector('.delBtn[data-id="'+m.id+'"]');
-      if(delB) delB.onclick = ()=>{
-        if(confirm('この自販機を削除しますか？')) deleteMachine(m.id);
-      };
-    });
-  });
-}
-
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
+// ============================================================
+// EXIF GPS Parsing (preserved from original)
+// ============================================================
 function readExifGPS(file){
   return new Promise((resolve)=>{
     const slice = file.slice(0, 131072);
@@ -702,6 +695,9 @@ function readRat3(buf, tiff, entryOff, le){
   return vals;
 }
 
+// ============================================================
+// Image Compression (preserved)
+// ============================================================
 function compressImage(file, maxSize=640, quality=0.6){
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
@@ -724,233 +720,13 @@ function compressImage(file, maxSize=640, quality=0.6){
   });
 }
 
-function renderPhotoRow(){
-  const row = document.getElementById('photoRow');
-  row.innerHTML = '';
-  currentPhotos.forEach((p, idx)=>{
-    const div = document.createElement('div');
-    div.className = 'photoThumb';
-    div.innerHTML = `<img src="${p}"><button class="rm" data-idx="${idx}">✕</button>`;
-    div.querySelector('.rm').onclick = ()=>{
-      currentPhotos.splice(idx,1);
-      renderPhotoRow();
-    };
-    row.appendChild(div);
-  });
-  document.getElementById('photoAddBtn').style.display = currentPhotos.length >= MAX_PHOTOS ? 'none' : 'inline-flex';
-  document.getElementById('photoHint').textContent = currentPhotos.length >= MAX_PHOTOS
-    ? '上限の3枚に達しました'
-    : `${currentPhotos.length} / ${MAX_PHOTOS} 枚`;
-}
-
-document.getElementById('photoInput').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  e.target.value = '';
-  if(!file) return;
-  if(currentPhotos.length >= MAX_PHOTOS){
-    showToast("写真は3枚までです");
-    return;
-  }
-  try{
-    const gps = await readExifGPS(file);
-    if(gps){
-      pendingLatLng = L.latLng(gps.lat, gps.lon);
-      pendingSource = 'photo';
-      showPreviewMarker(gps.lat, gps.lon);
-      map.flyTo([gps.lat, gps.lon], 19, { duration: 1.0 });
-      updateLocationHint();
-      showToast("📷 写真の撮影地点を取得しました");
-    } else {
-      showToast("⚠ 写真に位置情報がありません。地図タップで位置を指定してください");
-    }
-    const dataUrl = await compressImage(file);
-    currentPhotos.push(dataUrl);
-    renderPhotoRow();
-  }catch(err){
-    showToast("写真の処理に失敗しました");
-  }
-});
-function buildTagOptions(){
-  const pWrap = document.getElementById('productTags');
-  pWrap.innerHTML = '';
-  PRODUCT_OPTIONS.forEach(p=>{
-    const el = document.createElement('div');
-    el.className='tagopt';
-    el.textContent = p;
-    el.onclick = ()=>{
-      if(selectedProducts.has(p)) selectedProducts.delete(p); else selectedProducts.add(p);
-      el.classList.toggle('sel');
-    };
-    pWrap.appendChild(el);
-  });
-  const payWrap = document.getElementById('payTags');
-  payWrap.innerHTML = '';
-  PAY_OPTIONS.forEach(p=>{
-    const el = document.createElement('div');
-    el.className='tagopt';
-    el.textContent = p;
-    el.onclick = ()=>{
-      if(selectedPays.has(p)) selectedPays.delete(p); else selectedPays.add(p);
-      el.classList.toggle('sel');
-    };
-    payWrap.appendChild(el);
-  });
-}
-
-function openSheet(machine){
-  editingId = machine ? machine.id : null;
-  selectedProducts = new Set(machine ? machine.products : []);
-  selectedPays = new Set(machine ? machine.pays : []);
-  currentPhotos = machine && machine.photos ? machine.photos.slice() : [];
-  renderPhotoRow();
-  document.getElementById('makerSelect').value = machine ? machine.maker : "コカ・コーラ";
-  document.getElementById('noteInput').value = machine ? (machine.note||'') : '';
-  document.getElementById('sheetTitle').textContent = machine ? '自販機情報を更新' : '自販機を登録';
-  document.getElementById('continueBtn').style.display = machine ? 'none' : 'block';
-
-  if(machine){
-    pendingLatLng = L.latLng(machine.lat, machine.lng);
-    pendingSource = 'map';
-    document.getElementById('sheetHint').textContent = '商品ラインナップや決済方法の変更を反映できます';
-  } else {
-    updateLocationHint();
-  }
-
-  buildTagOptions();
-  document.querySelectorAll('#productTags .tagopt').forEach(el=>{
-    if(selectedProducts.has(el.textContent)) el.classList.add('sel');
-  });
-  document.querySelectorAll('#payTags .tagopt').forEach(el=>{
-    if(selectedPays.has(el.textContent)) el.classList.add('sel');
-  });
-
-  document.getElementById('overlay').classList.add('show');
-}
-
-function closeSheet(){
-  document.getElementById('overlay').classList.remove('show');
-  removePreviewMarker();
-  pendingLatLng = null;
-  pendingSource = 'map';
-  editingId = null;
-  currentPhotos = [];
-}
-
-async function saveSheet(continueNext){
-  if(!pendingLatLng){
-    showToast("位置が未設定です。マップをタップしてください");
-    return;
-  }
-  if(!db && !useLocal){
-    showToast("Firebaseが未設定のため保存できません");
-    return;
-  }
-  const maker = document.getElementById('makerSelect').value;
-  const note = document.getElementById('noteInput').value.trim();
-  const payload = {
-    lat: pendingLatLng.lat,
-    lng: pendingLatLng.lng,
-    maker,
-    products: Array.from(selectedProducts),
-    pays: Array.from(selectedPays),
-    note,
-    photos: currentPhotos.slice(),
-    updatedAt: Date.now()
-  };
-
-  const saveBtn = document.getElementById('saveBtn');
-  const contBtn = document.getElementById('continueBtn');
-  saveBtn.disabled = true;
-  contBtn.disabled = true;
-  saveBtn.textContent = '保存中...';
-  try{
-    if(editingId){
-      await updateMachine(editingId, payload);
-    } else {
-      await createMachine(payload);
-    }
-    if(continueNext){
-      closeSheet();
-      showToast("保存しました。次の写真を選んでください");
-      setTimeout(()=> document.getElementById('photoFabInput').click(), 400);
-    } else {
-      closeSheet();
-      showToast("保存しました");
-    }
-  }catch(e){
-    console.error(e);
-    showToast("保存に失敗: " + (e.message || e));
-  }finally{
-    saveBtn.disabled = false;
-    contBtn.disabled = false;
-    saveBtn.textContent = '保存する';
-  }
-}
-
-function locateMe(){
-  if(!navigator.geolocation){
-    showToast("位置情報が利用できません");
-    return;
-  }
-  try{
-    navigator.geolocation.getCurrentPosition(pos=>{
-      const ll = [pos.coords.latitude, pos.coords.longitude];
-      map.setView(ll, 17);
-    }, ()=>{
-      showToast("位置情報を取得できませんでした");
-    }, {timeout:5000});
-  }catch(e){
-    showToast("位置情報を取得できませんでした");
-  }
-}
-
-document.getElementById('addBtn').onclick = ()=>{
-  if(!pendingLatLng){
-    pendingLatLng = map.getCenter();
-    pendingSource = 'map';
-  }
-  openSheet(null);
-};
-document.getElementById('locateBtn').onclick = locateMe;
-document.getElementById('switchMapBtn').onclick = switchTileLayer;
-document.getElementById('photoFabInput').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  e.target.value = '';
-  if(!file) return;
-  try{
-    const gps = await readExifGPS(file);
-    if(gps){
-      pendingLatLng = L.latLng(gps.lat, gps.lon);
-      pendingSource = 'photo';
-      showPreviewMarker(gps.lat, gps.lon);
-      map.flyTo([gps.lat, gps.lon], 19, { duration: 1.0 });
-    } else {
-      pendingLatLng = map.getCenter();
-      pendingSource = 'map';
-      showToast("⚠ 位置情報がありません。地図タップで位置を指定してください");
-    }
-    const dataUrl = await compressImage(file);
-    currentPhotos = [dataUrl];
-    openSheet(null);
-    renderPhotoRow();
-    updateLocationHint();
-  }catch(err){
-    showToast("写真の処理に失敗しました");
-  }
-});
-document.getElementById('cancelBtn').onclick = closeSheet;
-document.getElementById('saveBtn').onclick = ()=> saveSheet(false);
-document.getElementById('continueBtn').onclick = ()=> saveSheet(true);
+// ============================================================
+// Geocoding (preserved)
+// ============================================================
 function normalizeAddress(q){
   return q
     .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
     .replace(/[ー－—–]/g, '-');
-}
-
-function detectZoom(norm){
-  if(/\d+[-の]\d+[-の]\d+|\d+丁目.*\d+番.*\d+号/.test(norm)) return 19;
-  if(/\d+[-の]\d+|\d+丁目|\d+番地?/.test(norm)) return 18;
-  return 15;
 }
 
 function toChome(norm){
@@ -996,56 +772,500 @@ async function geocodeNominatim(query){
   return (data && data.length) ? { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } : null;
 }
 
-async function searchArea(){
-  const q = document.getElementById('areaInput').value.trim();
-  if(!q){ showToast("地域名を入力してください"); return; }
-  const btn = document.getElementById('areaBtn');
-  const original = btn.textContent;
-  btn.textContent = '...';
-  btn.disabled = true;
-  try{
-    const norm = normalizeAddress(q);
-    const zoom = detectZoom(norm);
-    const queries = buildQueries(norm);
-    let result = null;
-    for(const query of queries){
-      result = await geocodeGSI(query);
-      if(result) break;
-    }
-    if(!result){
-      result = await geocodeNominatim(norm);
-    }
-    if(!result){
-      showToast("該当する場所が見つかりませんでした");
-      return;
-    }
-    const lat = result.lat;
-    const lon = result.lon;
-    map.flyTo([lat, lon], zoom, { duration: 1.2 });
-    showToast(`「${q}」付近（ズーム${zoom}）`);
-  }catch(e){
-    showToast("地域検索に失敗しました（通信環境をご確認ください）");
-  }finally{
-    btn.textContent = original;
-    btn.disabled = false;
+// ============================================================
+// Screen Management
+// ============================================================
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  // Invalidate maps when shown
+  if(id === 'regScreen' && regMap){
+    setTimeout(()=>{ try{ regMap.invalidateSize(); }catch(e){} }, 100);
+  }
+  if(id === 'navScreen' && navMap){
+    setTimeout(()=>{ try{ navMap.invalidateSize(); }catch(e){} }, 100);
   }
 }
 
-document.getElementById('searchBtn').onclick = renderMarkers;
-document.getElementById('searchInput').addEventListener('input', renderMarkers);
-document.getElementById('areaBtn').onclick = searchArea;
-document.getElementById('areaInput').addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter') searchArea();
+// ============================================================
+// Home Screen: Card List
+// ============================================================
+function renderCardList(){
+  const container = document.getElementById('cardsContainer');
+  const title = document.getElementById('cardListTitle');
+
+  if(machines.length === 0){
+    title.textContent = '';
+    container.innerHTML = '<div class="empty-msg">近くに登録された自販機はありません</div>';
+    return;
+  }
+
+  // Sort by distance from user
+  let sorted = machines.map(m => {
+    let dist = null;
+    if(userLat !== null && userLng !== null){
+      dist = haversineDistance(userLat, userLng, m.lat, m.lng);
+    }
+    return { ...m, _dist: dist };
+  });
+
+  if(userLat !== null){
+    sorted.sort((a, b) => (a._dist || 0) - (b._dist || 0));
+  }
+
+  title.textContent = `近くの自販機（${sorted.length}件）`;
+
+  container.innerHTML = sorted.map(m => {
+    const photoHtml = (m.photos && m.photos.length)
+      ? `<img src="${m.photos[0]}" alt="">`
+      : '🥤';
+    const distText = m._dist !== null ? formatDistance(m._dist) : '';
+    const productsText = (m.products && m.products.length) ? m.products.join('・') : '';
+    return `
+      <div class="vm-card" data-id="${m.id}">
+        <div class="vm-card-photo">${photoHtml}</div>
+        <div class="vm-card-info">
+          <div class="vm-card-maker">${escapeHtml(m.maker)}</div>
+          ${distText ? `<div class="vm-card-dist">${distText}</div>` : ''}
+          <div class="vm-card-products">${escapeHtml(productsText) || '（商品情報なし）'}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Attach click handlers
+  container.querySelectorAll('.vm-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = card.dataset.id;
+      const m = machines.find(x => x.id === id);
+      if(m) openDetail(m);
+    });
+  });
+}
+
+// ============================================================
+// Detail Modal
+// ============================================================
+function openDetail(machine){
+  detailMachine = machine;
+  detailPhotoIndex = 0;
+
+  document.getElementById('detailTitle').textContent = machine.maker || '詳細';
+
+  // Photos
+  const photosEl = document.getElementById('detailPhotos');
+  const photos = machine.photos || [];
+  if(photos.length === 0){
+    photosEl.innerHTML = '<div class="no-photo">🥤</div>';
+  } else {
+    let slidesHtml = photos.map(p => `<div class="swipe-slide"><img src="${p}"></div>`).join('');
+    let dotsHtml = photos.length > 1
+      ? '<div class="photo-dots">' + photos.map((_, i) => `<span class="${i===0?'active':''}"></span>`).join('') + '</div>'
+      : '';
+    photosEl.innerHTML = `<div class="swipe-container" id="swipeContainer">${slidesHtml}</div>${dotsHtml}`;
+
+    if(photos.length > 1){
+      const swipeCont = document.getElementById('swipeContainer');
+      swipeCont.addEventListener('touchstart', (e) => {
+        swipeStartX = e.touches[0].clientX;
+      }, {passive:true});
+      swipeCont.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - swipeStartX;
+        if(Math.abs(dx) > 50){
+          if(dx < 0 && detailPhotoIndex < photos.length - 1) detailPhotoIndex++;
+          if(dx > 0 && detailPhotoIndex > 0) detailPhotoIndex--;
+          swipeCont.style.transform = `translateX(-${detailPhotoIndex * 100}%)`;
+          photosEl.querySelectorAll('.photo-dots span').forEach((dot, i) => {
+            dot.classList.toggle('active', i === detailPhotoIndex);
+          });
+        }
+      }, {passive:true});
+    }
+  }
+
+  // Info
+  const infoEl = document.getElementById('detailInfo');
+  const products = machine.products || [];
+  const pays = machine.pays || [];
+  infoEl.innerHTML = `
+    <div class="d-maker">${escapeHtml(machine.maker)}</div>
+    ${products.length ? `
+      <div class="d-section">
+        <div class="d-label">商品ラインナップ</div>
+        <div class="d-tags">${products.map(p=>`<span class="d-tag">${escapeHtml(p)}</span>`).join('')}</div>
+      </div>
+    ` : ''}
+    ${pays.length ? `
+      <div class="d-section">
+        <div class="d-label">対応決済方法</div>
+        <div class="d-tags">${pays.map(p=>`<span class="d-tag">${escapeHtml(p)}</span>`).join('')}</div>
+      </div>
+    ` : ''}
+    ${machine.note ? `
+      <div class="d-section">
+        <div class="d-label">メモ</div>
+        <div class="d-note">${escapeHtml(machine.note)}</div>
+      </div>
+    ` : ''}
+    <div class="d-updated">最終更新: ${timeAgo(machine.updatedAt)}</div>
+  `;
+
+  document.getElementById('detailOverlay').classList.add('show');
+}
+
+function closeDetail(){
+  document.getElementById('detailOverlay').classList.remove('show');
+  detailMachine = null;
+}
+
+document.getElementById('detailCloseBtn').addEventListener('click', closeDetail);
+document.getElementById('detailCloseBtn2').addEventListener('click', closeDetail);
+
+document.getElementById('detailDeleteBtn').addEventListener('click', () => {
+  if(!detailMachine) return;
+  if(confirm('この自販機を削除しますか？')){
+    deleteMachine(detailMachine.id);
+    closeDetail();
+  }
 });
 
-(async function init(){
-  buildPayFilterChips();
-  const TOKYO = [35.6812, 139.7671];
-  initMap(TOKYO);
+document.getElementById('detailNavBtn').addEventListener('click', () => {
+  if(!detailMachine) return;
+  openNavigation(detailMachine);
+  closeDetail();
+});
+
+// ============================================================
+// Registration Flow
+// ============================================================
+function startRegistration(){
+  regLatLng = null;
+  regPhotos = [];
+  regSelectedProducts = new Set();
+  regSelectedPays = new Set();
+  regStep = 1;
+
+  showScreen('regScreen');
+  showRegStep(1);
+
+  if(!regMap){
+    const center = (userLat !== null) ? [userLat, userLng] : TOKYO;
+    regMap = L.map('regMap', {zoomControl:true, maxZoom:19}).setView(center, 16);
+    addTileLayer(regMap, 0);
+
+    regMap.on('click', (e) => {
+      regLatLng = e.latlng;
+      if(regMarker) regMap.removeLayer(regMarker);
+      regMarker = L.marker([e.latlng.lat, e.latlng.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: '<div style="width:20px;height:20px;background:var(--ok,#3aa66b);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);"></div>',
+          iconSize: [20,20],
+          iconAnchor: [10,10]
+        })
+      }).addTo(regMap);
+      document.getElementById('regCoordText').textContent = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
+      document.getElementById('regMapNextBtn').disabled = false;
+    });
+  } else {
+    const center = (userLat !== null) ? [userLat, userLng] : TOKYO;
+    regMap.setView(center, 16);
+    if(regMarker){ regMap.removeLayer(regMarker); regMarker = null; }
+  }
+
+  document.getElementById('regCoordText').textContent = '未選択';
+  document.getElementById('regMapNextBtn').disabled = true;
+  setTimeout(()=>{ try{ regMap.invalidateSize(); }catch(e){} }, 150);
+}
+
+function showRegStep(step){
+  regStep = step;
+  document.getElementById('regMapStep').classList.toggle('active', step === 1);
+  document.getElementById('regPhotoStep').classList.toggle('active', step === 2);
+  document.getElementById('regFormStep').classList.toggle('active', step === 3);
+
+  const ind1 = document.getElementById('regStep1Ind');
+  const ind2 = document.getElementById('regStep2Ind');
+  const ind3 = document.getElementById('regStep3Ind');
+
+  ind1.className = 'reg-step-indicator' + (step === 1 ? ' active' : (step > 1 ? ' done' : ''));
+  ind2.className = 'reg-step-indicator' + (step === 2 ? ' active' : (step > 2 ? ' done' : ''));
+  ind3.className = 'reg-step-indicator' + (step === 3 ? ' active' : '');
+
+  if(step === 1){
+    setTimeout(()=>{ try{ regMap.invalidateSize(); }catch(e){} }, 100);
+  }
+  if(step === 2){
+    renderRegPhotoStep();
+  }
+  if(step === 3){
+    buildRegTagOptions();
+  }
+}
+
+function renderRegPhotoStep(){
+  const preview = document.getElementById('regPhotoPreview');
+  const thumbs = document.getElementById('regPhotoThumbs');
+
+  if(regPhotos.length === 0){
+    preview.innerHTML = '<div class="placeholder">写真を追加してください（任意）</div>';
+  } else {
+    preview.innerHTML = `<img src="${regPhotos[regPhotos.length - 1]}">`;
+  }
+
+  thumbs.innerHTML = regPhotos.map((p, i) => `
+    <div class="pt">
+      <img src="${p}">
+      <button class="pt-rm" data-idx="${i}">✕</button>
+    </div>
+  `).join('');
+
+  thumbs.querySelectorAll('.pt-rm').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx);
+      regPhotos.splice(idx, 1);
+      renderRegPhotoStep();
+    });
+  });
+}
+
+document.getElementById('regPhotoInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  if(regPhotos.length >= MAX_PHOTOS){
+    showToast("写真は3枚までです");
+    return;
+  }
+  try{
+    // Check EXIF for GPS — if found and no location set yet, use it
+    const gps = await readExifGPS(file);
+    if(gps && !regLatLng){
+      regLatLng = L.latLng(gps.lat, gps.lon);
+      showToast("写真の撮影地点を位置として設定しました");
+    }
+    const dataUrl = await compressImage(file);
+    regPhotos.push(dataUrl);
+    renderRegPhotoStep();
+  }catch(err){
+    showToast("写真の処理に失敗しました");
+  }
+});
+
+function buildRegTagOptions(){
+  const pWrap = document.getElementById('regProductTags');
+  pWrap.innerHTML = '';
+  PRODUCT_OPTIONS.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'tagopt' + (regSelectedProducts.has(p) ? ' sel' : '');
+    el.textContent = p;
+    el.onclick = () => {
+      if(regSelectedProducts.has(p)) regSelectedProducts.delete(p); else regSelectedProducts.add(p);
+      el.classList.toggle('sel');
+    };
+    pWrap.appendChild(el);
+  });
+
+  const payWrap = document.getElementById('regPayTags');
+  payWrap.innerHTML = '';
+  PAY_OPTIONS.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'tagopt' + (regSelectedPays.has(p) ? ' sel' : '');
+    el.textContent = p;
+    el.onclick = () => {
+      if(regSelectedPays.has(p)) regSelectedPays.delete(p); else regSelectedPays.add(p);
+      el.classList.toggle('sel');
+    };
+    payWrap.appendChild(el);
+  });
+}
+
+async function saveRegistration(){
+  if(!regLatLng){
+    showToast("位置が未設定です");
+    return;
+  }
+
+  const maker = document.getElementById('regMakerSelect').value;
+  const note = document.getElementById('regNoteInput').value.trim();
+  const payload = {
+    lat: regLatLng.lat,
+    lng: regLatLng.lng,
+    maker,
+    products: Array.from(regSelectedProducts),
+    pays: Array.from(regSelectedPays),
+    note,
+    photos: regPhotos.slice(),
+    updatedAt: Date.now()
+  };
+
+  const saveBtn = document.getElementById('regSaveBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = '保存中...';
+  try{
+    await createMachine(payload);
+    showToast("保存しました");
+    showScreen('homeScreen');
+    renderCardList();
+  }catch(e){
+    console.error(e);
+    showToast("保存に失敗: " + (e.message || e));
+  }finally{
+    saveBtn.disabled = false;
+    saveBtn.textContent = '保存する';
+  }
+}
+
+// Registration button handlers
+document.getElementById('startRegBtn').addEventListener('click', startRegistration);
+
+document.getElementById('regBackBtn').addEventListener('click', () => {
+  if(regStep > 1){
+    showRegStep(regStep - 1);
+  } else {
+    showScreen('homeScreen');
+  }
+});
+
+document.getElementById('regMapNextBtn').addEventListener('click', () => {
+  if(!regLatLng){
+    showToast("位置を地図上でタップしてください");
+    return;
+  }
+  showRegStep(2);
+});
+
+document.getElementById('regPhotoBackBtn').addEventListener('click', () => showRegStep(1));
+
+document.getElementById('regPhotoNextBtn').addEventListener('click', () => showRegStep(3));
+
+document.getElementById('regFormBackBtn').addEventListener('click', () => showRegStep(2));
+
+document.getElementById('regSaveBtn').addEventListener('click', saveRegistration);
+
+// ============================================================
+// Navigation Screen
+// ============================================================
+function openNavigation(machine){
+  showScreen('navScreen');
+  document.getElementById('navDest').textContent = machine.maker + (machine.note ? ' - ' + machine.note : '');
+
+  const destLat = machine.lat;
+  const destLng = machine.lng;
+
+  // Distance
+  if(userLat !== null){
+    const dist = haversineDistance(userLat, userLng, destLat, destLng);
+    document.getElementById('navDistLabel').textContent = formatDistance(dist);
+  } else {
+    document.getElementById('navDistLabel').textContent = '';
+  }
+
+  if(!navMap){
+    navMap = L.map('navMap', {zoomControl:true, maxZoom:19}).setView([destLat, destLng], 16);
+    navTileIndex = 0;
+    navActiveTile = addTileLayer(navMap, 0);
+  } else {
+    navMap.setView([destLat, destLng], 16);
+  }
+
+  // Clear old markers/route
+  if(navUserMarker){ navMap.removeLayer(navUserMarker); navUserMarker = null; }
+  if(navDestMarker){ navMap.removeLayer(navDestMarker); navDestMarker = null; }
+  if(navRouteLine){ navMap.removeLayer(navRouteLine); navRouteLine = null; }
+
+  // Dest marker (red)
+  navDestMarker = L.circleMarker([destLat, destLng], {
+    radius:12, color:'#c0392b', weight:3, fillColor:'#ff5a3c', fillOpacity:0.9
+  }).addTo(navMap);
+
+  // User marker (blue)
+  if(userLat !== null){
+    navUserMarker = L.circleMarker([userLat, userLng], {
+      radius:10, color:'#1a5276', weight:3, fillColor:'#3498db', fillOpacity:0.9
+    }).addTo(navMap);
+
+    // Fit bounds
+    const bounds = L.latLngBounds([[userLat, userLng], [destLat, destLng]]);
+    navMap.fitBounds(bounds, {padding:[50,50]});
+
+    // Get walking route from OSRM
+    fetchRoute(userLat, userLng, destLat, destLng);
+  }
+
+  setTimeout(()=>{ try{ navMap.invalidateSize(); }catch(e){} }, 150);
+}
+
+async function fetchRoute(lat1, lng1, lat2, lng2){
+  try{
+    const url = `https://router.project-osrm.org/route/v1/foot/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('OSRM error');
+    const data = await res.json();
+    if(data.routes && data.routes.length > 0){
+      const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      if(navRouteLine){ navMap.removeLayer(navRouteLine); }
+      navRouteLine = L.polyline(coords, {
+        color: '#3498db',
+        weight: 4,
+        dashArray: '10, 8',
+        opacity: 0.8
+      }).addTo(navMap);
+    }
+  }catch(e){
+    console.warn('OSRM routing failed, falling back to straight line:', e);
+    // Fallback: straight dashed line
+    if(navRouteLine){ navMap.removeLayer(navRouteLine); }
+    navRouteLine = L.polyline([[lat1, lng1], [lat2, lng2]], {
+      color: '#3498db',
+      weight: 3,
+      dashArray: '10, 8',
+      opacity: 0.7
+    }).addTo(navMap);
+  }
+}
+
+document.getElementById('navBackBtn').addEventListener('click', () => {
+  showScreen('homeScreen');
+});
+
+document.getElementById('navSwitchMapBtn').addEventListener('click', () => {
+  if(!navMap) return;
+  navTileIndex = (navTileIndex + 1) % TILE_LAYERS.length;
+  if(navActiveTile) navMap.removeLayer(navActiveTile);
+  navActiveTile = addTileLayer(navMap, navTileIndex);
+  showToast(TILE_LAYERS[navTileIndex].name);
+});
+
+// ============================================================
+// Geolocation
+// ============================================================
+function geolocateUser(){
+  if(!navigator.geolocation) return;
+  try{
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        renderCardList();
+      },
+      () => { /* denied/failed - cards still show, just without distance */ },
+      {timeout:8000, maximumAge:60000}
+    );
+  }catch(e){
+    // Permissions-Policy block etc.
+  }
+}
+
+// ============================================================
+// Init
+// ============================================================
+(function init(){
   const ok = initFirebase();
   if(ok) subscribeMachines();
-  renderMarkers();
-  tryGeolocateAndCenter();
+  renderCardList();
+  geolocateUser();
 })();
 </script>
 </body>
