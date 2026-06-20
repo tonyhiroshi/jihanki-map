@@ -414,6 +414,7 @@ let regSelectedProducts = new Set();
 let regSelectedPays = new Set();
 let regMap = null;
 let regMarker = null;
+let regUserMarker = null;
 let regStep = 1;
 
 // Navigation state
@@ -976,6 +977,36 @@ function startRegistration(){
   document.getElementById('regCoordText').textContent = '未選択';
   document.getElementById('regMapNextBtn').disabled = true;
   setTimeout(()=>{ try{ regMap.invalidateSize(); }catch(e){} }, 150);
+
+  // 現在地マーカーを表示。未取得なら取得してから表示する。
+  if(userLat !== null){
+    showRegUserLocation();
+  } else if(navigator.geolocation){
+    document.getElementById('regCoordText').textContent = '現在地を取得中...';
+    try{
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          userLat = pos.coords.latitude;
+          userLng = pos.coords.longitude;
+          renderCardList();
+          regMap.setView([userLat, userLng], 16);
+          showRegUserLocation();
+          if(!regLatLng) document.getElementById('regCoordText').textContent = '未選択';
+        },
+        () => { if(!regLatLng) document.getElementById('regCoordText').textContent = '未選択'; },
+        {enableHighAccuracy:true, timeout:8000, maximumAge:60000}
+      );
+    }catch(e){ document.getElementById('regCoordText').textContent = '未選択'; }
+  }
+}
+
+// 登録地図上に現在地（青い点）を表示
+function showRegUserLocation(){
+  if(!regMap || userLat === null) return;
+  if(regUserMarker) regMap.removeLayer(regUserMarker);
+  regUserMarker = L.circleMarker([userLat, userLng], {
+    radius: 8, color:'#fff', weight:2, fillColor:'#2a7de1', fillOpacity:1
+  }).addTo(regMap).bindTooltip('現在地', {permanent:false});
 }
 
 function showRegStep(step){
