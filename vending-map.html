@@ -76,6 +76,11 @@
   .vm-card-info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;}
   .vm-card-maker{font-size:14px;font-weight:700;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .vm-card-dist{font-size:12px;color:var(--neon);font-weight:700;margin-bottom:3px;}
+  .vm-card-feature{
+    font-size:12px;font-weight:700;color:var(--steel-deep);margin-bottom:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .vm-card-price{color:var(--neon);font-weight:800;}
   .vm-card-products{font-size:11px;color:#7a6e58;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
   /* ---- Detail Modal ---- */
@@ -140,6 +145,8 @@
     background:#fff;border:1px solid var(--line);border-radius:999px;
     padding:5px 11px;font-size:12px;color:var(--ink);
   }
+  .detail-info .d-feature{font-size:15px;font-weight:700;color:var(--steel-deep);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .detail-info .d-price{color:var(--neon);font-weight:900;font-size:16px;}
   .detail-info .d-note{font-size:13px;color:#555;line-height:1.6;margin-top:4px;}
   .detail-info .d-updated{font-size:11px;color:#aaa;margin-top:6px;}
   .detail-actions{
@@ -246,8 +253,9 @@
   .reg-form-step{flex:1;display:none;flex-direction:column;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
   .reg-form-step.active{display:flex;}
   .field{margin-bottom:16px;}
+  .field-row{display:flex;gap:10px;}
   .field label{display:block;font-size:12px;font-weight:700;color:var(--steel-deep);margin-bottom:6px;letter-spacing:.3px;}
-  .field select,.field input[type=text]{
+  .field select,.field input[type=text],.field input[type=number]{
     width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:#fff;
     -webkit-appearance:none;
   }
@@ -461,6 +469,16 @@
       <div class="field">
         <label>商品ラインナップ（複数選択可）</label>
         <div class="tagrow" id="regProductTags"></div>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:2;">
+          <label>目玉商品（任意）</label>
+          <input type="text" id="regFeatureInput" placeholder="例: 季節限定ミルクティー">
+        </div>
+        <div class="field" style="flex:1;">
+          <label>金額（任意）</label>
+          <input type="number" id="regPriceInput" inputmode="numeric" min="0" placeholder="160">
+        </div>
       </div>
       <div class="field">
         <label>対応決済方法</label>
@@ -976,6 +994,16 @@ function showScreen(id){
 // ============================================================
 // Home Screen: Card List
 // ============================================================
+// 目玉商品＋金額の表示（カード・詳細で共用）
+function buildFeatureHtml(m){
+  const hasFeature = m.feature && m.feature.trim() !== '';
+  const hasPrice = (m.price !== null && m.price !== undefined && m.price !== '');
+  if(!hasFeature && !hasPrice) return '';
+  const name = hasFeature ? escapeHtml(m.feature) : '目玉商品';
+  const price = hasPrice ? `<span class="vm-card-price">¥${Number(m.price).toLocaleString()}</span>` : '';
+  return `<div class="vm-card-feature">⭐ ${name} ${price}</div>`;
+}
+
 function renderCardList(){
   const container = document.getElementById('cardsContainer');
   const title = document.getElementById('cardListTitle');
@@ -1007,12 +1035,14 @@ function renderCardList(){
       : '🥤';
     const distText = m._dist !== null ? formatDistance(m._dist) : '';
     const productsText = (m.products && m.products.length) ? m.products.join('・') : '';
+    const featureHtml = buildFeatureHtml(m);
     return `
       <div class="vm-card" data-id="${m.id}">
         <div class="vm-card-photo">${photoHtml}</div>
         <div class="vm-card-info">
           <div class="vm-card-maker">${escapeHtml(m.maker)}</div>
           ${distText ? `<div class="vm-card-dist">${distText}</div>` : ''}
+          ${featureHtml}
           <div class="vm-card-products">${escapeHtml(productsText) || '（商品情報なし）'}</div>
         </div>
       </div>
@@ -1083,8 +1113,18 @@ function openDetail(machine){
   const infoEl = document.getElementById('detailInfo');
   const products = machine.products || [];
   const pays = machine.pays || [];
+  const hasFeature = machine.feature && machine.feature.trim() !== '';
+  const hasPrice = (machine.price !== null && machine.price !== undefined && machine.price !== '');
   infoEl.innerHTML = `
     <div class="d-maker">${escapeHtml(machine.maker)}</div>
+    ${(hasFeature || hasPrice) ? `
+      <div class="d-section">
+        <div class="d-label">目玉商品</div>
+        <div class="d-feature">⭐ ${hasFeature ? escapeHtml(machine.feature) : '目玉商品'}
+          ${hasPrice ? `<span class="d-price">¥${Number(machine.price).toLocaleString()}</span>` : ''}
+        </div>
+      </div>
+    ` : ''}
     ${products.length ? `
       <div class="d-section">
         <div class="d-label">商品ラインナップ</div>
@@ -1253,6 +1293,11 @@ function startRegistration(){
   regSelectedProducts = new Set();
   regSelectedPays = new Set();
   regStep = 1;
+
+  // テキスト入力をリセット
+  ['regSearchInput','regFeatureInput','regPriceInput','regNoteInput'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
 
   showScreen('regScreen');
   showRegStep(1);
@@ -1428,12 +1473,17 @@ async function saveRegistration(){
 
   const maker = document.getElementById('regMakerSelect').value;
   const note = document.getElementById('regNoteInput').value.trim();
+  const feature = document.getElementById('regFeatureInput').value.trim();
+  const priceRaw = document.getElementById('regPriceInput').value.trim();
+  const price = priceRaw === '' ? null : Math.max(0, parseInt(priceRaw, 10) || 0);
   const payload = {
     lat: regLatLng.lat,
     lng: regLatLng.lng,
     maker,
     products: Array.from(regSelectedProducts),
     pays: Array.from(regSelectedPays),
+    feature,
+    price,
     note,
     photos: regPhotos.slice(),
     updatedAt: Date.now()
