@@ -543,18 +543,17 @@
     <!-- Step 3: Form -->
     <div class="reg-form-step" id="regFormStep">
       <div class="field">
-        <label>メーカー</label>
-        <select id="regMakerSelect">
-          <option>コカ・コーラ</option>
-          <option>サントリー</option>
-          <option>アサヒ飲料</option>
-          <option>ダイドードリンコ</option>
-          <option>伊藤園</option>
-          <option>JR東日本ウォーターズ</option>
-          <option>キリン ビバレッジ</option>
+        <label>種類</label>
+        <div class="tagrow" id="regCategoryTags"></div>
+      </div>
+      <div class="field">
+        <label>メーカー・ブランド（任意）</label>
+        <input type="text" id="regMakerSelect" list="makerSuggest" placeholder="例: コカ・コーラ／〇〇ラーメン店">
+        <datalist id="makerSuggest">
+          <option>コカ・コーラ</option><option>サントリー</option><option>アサヒ飲料</option>
+          <option>ダイドードリンコ</option><option>伊藤園</option><option>キリン ビバレッジ</option>
           <option>ポッカサッポロ</option>
-          <option>その他</option>
-        </select>
+        </datalist>
       </div>
       <div class="field">
         <label>商品ラインナップ（複数選択可）</label>
@@ -611,6 +610,10 @@
     </div>
     <div class="filter-body">
       <div class="filter-sec">
+        <div class="filter-label">種類</div>
+        <div class="filter-chips" id="filterCatChips"></div>
+      </div>
+      <div class="filter-sec">
         <div class="filter-label">価格（目玉商品）</div>
         <div class="filter-chips" id="filterPriceChips"></div>
       </div>
@@ -659,7 +662,29 @@
 // ============================================================
 // Constants
 // ============================================================
-const PRODUCT_OPTIONS = ["炭酸","お茶","コーヒー","水","スポーツ飲料","ジュース","エナジー系","カップ自販機","アイス","軽食"];
+// 種類（カテゴリ）
+const CATEGORIES = [
+  { key:'drink',  label:'飲料',        icon:'🥤' },
+  { key:'ice',    label:'アイス',      icon:'🍦' },
+  { key:'frozen', label:'冷凍食品',    icon:'❄️' },
+  { key:'ramen',  label:'ラーメン・麺', icon:'🍜' },
+  { key:'meat',   label:'お肉',        icon:'🍖' },
+  { key:'snack',  label:'お菓子・パン', icon:'🍞' },
+  { key:'other',  label:'その他物販',  icon:'🧸' }
+];
+function catOf(key){ return CATEGORIES.find(c => c.key === key) || CATEGORIES[0]; }
+
+// カテゴリ別の商品タグ
+const PRODUCTS_BY_CAT = {
+  drink:  ["炭酸","お茶","コーヒー","水","スポーツ飲料","ジュース","エナジー系","カップ自販機"],
+  ice:    ["アイスクリーム","ソフトクリーム","アイスバー","かき氷","ジェラート"],
+  frozen: ["餃子","ラーメン","お肉","海鮮","お弁当","からあげ","チャーハン","スイーツ","パスタ"],
+  ramen:  ["ラーメン","うどん","そば","焼きそば","つけ麺","パスタ"],
+  meat:   ["精肉","焼肉セット","ステーキ","ハンバーグ","加工肉","ジビエ"],
+  snack:  ["パン","スナック菓子","チョコ","クッキー","ドーナツ","おつまみ","駄菓子"],
+  other:  ["日用品","お花","おもちゃ","カプセルトイ","本","雑貨","マスク","チケット"]
+};
+const PRODUCT_OPTIONS = PRODUCTS_BY_CAT.drink; // 後方互換
 const PAY_OPTIONS = ["現金","交通系IC","QRコード決済","クレジット(タッチ)","電子マネー"];
 const MAX_PHOTOS = 3;
 const TOKYO = [35.6812, 139.7671];
@@ -679,6 +704,7 @@ let regMap = null;
 let regMarker = null;
 let regUserMarker = null;
 let regStep = 1;
+let regCategory = 'drink';    // 登録中の種類
 let isEditMode = false;       // 既存自販機の情報編集モード
 let editingMachineId = null;
 
@@ -836,6 +862,7 @@ async function createMachine(data){
   // メイン文書は軽量（写真本体は含めない）
   const mainDoc = {
     lat: data.lat, lng: data.lng, maker: data.maker,
+    category: data.category || 'drink',
     products: data.products, pays: data.pays,
     feature: data.feature, price: data.price, note: data.note,
     updatedAt: data.updatedAt, thumb, photoCount: photos.length,
@@ -858,6 +885,7 @@ async function updateMachine(id, fields, photos){
   if(!db) return;
   const thumb = photos.length ? await makeThumb(photos[0]) : '';
   await db.collection('machines').doc(id).update({
+    category: fields.category || 'drink',
     maker: fields.maker,
     products: fields.products,
     pays: fields.pays,
@@ -1226,14 +1254,15 @@ const PRICE_OPTIONS = [
   { label: '〜120円', max: 120 },
   { label: '〜150円', max: 150 }
 ];
-let activeFilters = { priceMax: null, pays: new Set(), products: new Set() };
+let activeFilters = { cats: new Set(), priceMax: null, pays: new Set(), products: new Set() };
 
 function activeFilterCount(){
-  return (activeFilters.priceMax !== null ? 1 : 0) + activeFilters.pays.size + activeFilters.products.size;
+  return activeFilters.cats.size + (activeFilters.priceMax !== null ? 1 : 0) + activeFilters.pays.size + activeFilters.products.size;
 }
 
 // フィルタ条件に一致するか
 function matchesFilters(m){
+  if(activeFilters.cats.size && !activeFilters.cats.has(m.category || 'drink')) return false;
   if(activeFilters.priceMax !== null){
     if(m.price === null || m.price === undefined || m.price === '' || Number(m.price) > activeFilters.priceMax) return false;
   }
@@ -1271,8 +1300,21 @@ function buildFilterChips(){
       wrap.appendChild(el);
     });
   };
+  const catWrap = document.getElementById('filterCatChips');
+  catWrap.innerHTML = '';
+  CATEGORIES.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'chip' + (activeFilters.cats.has(c.key) ? ' sel' : '');
+    el.textContent = c.icon + ' ' + c.label;
+    el.onclick = () => {
+      if(activeFilters.cats.has(c.key)) activeFilters.cats.delete(c.key); else activeFilters.cats.add(c.key);
+      el.classList.toggle('sel');
+    };
+    catWrap.appendChild(el);
+  });
+  const allProducts = [...new Set(Object.values(PRODUCTS_BY_CAT).flat())];
   mkChips(document.getElementById('filterPayChips'), PAY_OPTIONS, activeFilters.pays);
-  mkChips(document.getElementById('filterProductChips'), PRODUCT_OPTIONS, activeFilters.products);
+  mkChips(document.getElementById('filterProductChips'), allProducts, activeFilters.products);
 }
 
 function openFilterSheet(){
@@ -1297,7 +1339,7 @@ document.getElementById('filterSheet').addEventListener('click', (e) => {
   if(e.target.id === 'filterSheet') closeFilterSheet();
 });
 document.getElementById('filterClearBtn').addEventListener('click', () => {
-  activeFilters = { priceMax: null, pays: new Set(), products: new Set() };
+  activeFilters = { cats: new Set(), priceMax: null, pays: new Set(), products: new Set() };
   buildFilterChips();
   updateFilterButton();
   renderCardList();
@@ -1312,6 +1354,13 @@ document.getElementById('filterApplyBtn').addEventListener('click', () => {
     products: Array.from(activeFilters.products).join(',')
   });
 });
+
+// 種類アイコン＋名称（メーカー無しなら種類名）
+function machineTitle(m){
+  const cat = catOf(m.category || 'drink');
+  const name = (m.maker && m.maker.trim()) ? m.maker : cat.label;
+  return cat.icon + ' ' + escapeHtml(name);
+}
 
 // 目玉商品＋金額の表示（カード・詳細で共用）
 function buildFeatureHtml(m){
@@ -1370,7 +1419,7 @@ function renderCardList(){
       <div class="vm-card" data-id="${m.id}">
         <div class="vm-card-photo">${photoHtml}</div>
         <div class="vm-card-info">
-          <div class="vm-card-maker">${escapeHtml(m.maker)}</div>
+          <div class="vm-card-maker">${machineTitle(m)}</div>
           ${distText ? `<div class="vm-card-dist">${distText}</div>` : ''}
           ${featureHtml}
           <div class="vm-card-products">${escapeHtml(productsText) || '（商品情報なし）'}</div>
@@ -1525,7 +1574,8 @@ function openDetail(machine){
   detailPhotoIndex = 0;
   logEv('view_machine', { maker: machine.maker || '' });
 
-  document.getElementById('detailTitle').textContent = machine.maker || '詳細';
+  const _cat = catOf(machine.category || 'drink');
+  document.getElementById('detailTitle').textContent = _cat.icon + ' ' + (machine.maker || _cat.label);
 
   // Photos（写真本体は必要なときだけ取得）
   renderDetailPhotosFor(machine);
@@ -1537,7 +1587,7 @@ function openDetail(machine){
   const hasFeature = machine.feature && machine.feature.trim() !== '';
   const hasPrice = (machine.price !== null && machine.price !== undefined && machine.price !== '');
   infoEl.innerHTML = `
-    <div class="d-maker">${escapeHtml(machine.maker)}</div>
+    <div class="d-maker">${machineTitle(machine)}</div>
     ${(hasFeature || hasPrice) ? `
       <div class="d-section">
         <div class="d-label">目玉商品</div>
@@ -1734,10 +1784,11 @@ async function startEdit(machine){
   regLatLng = L.latLng(machine.lat, machine.lng); // 位置は維持
   regSelectedProducts = new Set(machine.products || []);
   regSelectedPays = new Set(machine.pays || []);
+  regCategory = machine.category || 'drink';
   regPhotos = [];
 
   // フォームに既存値をセット
-  document.getElementById('regMakerSelect').value = machine.maker || 'その他';
+  document.getElementById('regMakerSelect').value = machine.maker || '';
   document.getElementById('regFeatureInput').value = machine.feature || '';
   document.getElementById('regPriceInput').value = (machine.price !== null && machine.price !== undefined) ? machine.price : '';
   document.getElementById('regNoteInput').value = machine.note || '';
@@ -1845,9 +1896,11 @@ async function generateShareCard(machine){
   }
   x.restore();
 
-  // メーカー名
+  // 種類アイコン＋メーカー名
+  const scat = catOf(machine.category || 'drink');
+  const stitle = scat.icon + ' ' + (machine.maker || scat.label);
   x.fillStyle = '#fff'; x.font = `bold 62px ${JP}`;
-  x.fillText(fitText(x, machine.maker || '自販機', pw), px, 748);
+  x.fillText(fitText(x, stitle, pw), px, 748);
 
   let cy = 806;
   // 目玉商品＋価格
@@ -1931,6 +1984,7 @@ function startRegistration(){
   regPhotos = [];
   regSelectedProducts = new Set();
   regSelectedPays = new Set();
+  regCategory = 'drink';
   regStep = 1;
 
   // 編集モードからのUIを通常登録に戻す
@@ -2082,10 +2136,11 @@ document.getElementById('regPhotoInput').addEventListener('change', async (e) =>
   }
 });
 
-function buildRegTagOptions(){
+// 種類に応じた商品タグを描画
+function buildRegProductTags(){
   const pWrap = document.getElementById('regProductTags');
   pWrap.innerHTML = '';
-  PRODUCT_OPTIONS.forEach(p => {
+  (PRODUCTS_BY_CAT[regCategory] || PRODUCTS_BY_CAT.drink).forEach(p => {
     const el = document.createElement('div');
     el.className = 'tagopt' + (regSelectedProducts.has(p) ? ' sel' : '');
     el.textContent = p;
@@ -2095,6 +2150,26 @@ function buildRegTagOptions(){
     };
     pWrap.appendChild(el);
   });
+}
+
+function buildRegTagOptions(){
+  // 種類チップ（単一選択）
+  const catWrap = document.getElementById('regCategoryTags');
+  catWrap.innerHTML = '';
+  CATEGORIES.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'tagopt' + (regCategory === c.key ? ' sel' : '');
+    el.textContent = c.icon + ' ' + c.label;
+    el.onclick = () => {
+      regCategory = c.key;
+      catWrap.querySelectorAll('.tagopt').forEach(t => t.classList.remove('sel'));
+      el.classList.add('sel');
+      buildRegProductTags(); // 商品タグを切り替え
+    };
+    catWrap.appendChild(el);
+  });
+
+  buildRegProductTags();
 
   const payWrap = document.getElementById('regPayTags');
   payWrap.innerHTML = '';
@@ -2143,6 +2218,7 @@ async function saveRegistration(){
   const priceRaw = document.getElementById('regPriceInput').value.trim();
   const price = priceRaw === '' ? null : Math.max(0, parseInt(priceRaw, 10) || 0);
   const fields = {
+    category: regCategory,
     maker,
     products: Array.from(regSelectedProducts),
     pays: Array.from(regSelectedPays),

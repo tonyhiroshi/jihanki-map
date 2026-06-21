@@ -17,7 +17,7 @@ service cloud.firestore {
       // （許可リスト外のキーが含まれると拒否されるため、自動的に保護される）。
       allow update: if request.auth != null
                     && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['maker','products','pays','feature','price','note','updatedAt','lastEditUid','thumb','photoCount']);
+                         .hasOnly(['category','maker','products','pays','feature','price','note','updatedAt','lastEditUid','thumb','photoCount']);
       // 削除は投稿者本人のみ
       allow delete: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid;
