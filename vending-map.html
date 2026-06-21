@@ -340,8 +340,9 @@
   }
   .rank-bar-icon{font-size:22px;line-height:1;flex-shrink:0;}
   .rank-bar-body{flex:1;min-width:0;}
-  .rank-bar-name{font-size:12px;font-weight:700;color:var(--paper);margin-bottom:5px;}
+  .rank-bar-name{font-size:12px;font-weight:700;color:var(--paper);margin-bottom:5px;line-height:1.5;}
   .rank-bar-name .rb-count{color:var(--coin);}
+  .rank-bar-name .rb-breakdown{color:rgba(255,255,255,.55);font-weight:600;font-size:11px;margin-left:4px;}
   .rank-bar-gauge{height:7px;border-radius:99px;background:rgba(0,0,0,.25);overflow:hidden;}
   .rank-bar-fill{
     height:100%;width:0;border-radius:99px;
@@ -552,7 +553,7 @@
 <div class="reward-overlay" id="rewardOverlay">
   <div class="reward-card" id="rewardCard">
     <div class="reward-emoji" id="rewardEmoji">🥤</div>
-    <div class="reward-title">登録ありがとう！</div>
+    <div class="reward-title" id="rewardTitle">登録ありがとう！</div>
     <div class="reward-count" id="rewardCount">+1</div>
     <div class="reward-rankup" id="rewardRankup">★ ランクアップ ★</div>
     <div class="reward-rank-name" id="rewardRankName"></div>
@@ -1754,7 +1755,16 @@ async function saveRegistration(){
       isEditMode = false; editingMachineId = null;
       showScreen('homeScreen');
       renderCardList();
-      showToast('情報を更新しました');
+      // メンテ貢献 +1（ランクアップ時は演出、通常はトースト）
+      const prevTotal = getContribution();
+      setMyEdits(getMyEdits() + 1);
+      const newTotal = getContribution();
+      renderRankBadge();
+      if(getRankInfo(newTotal).idx > getRankInfo(prevTotal).idx){
+        showReward(prevTotal, newTotal, 'edit');
+      } else {
+        showToast('情報を更新しました（メンテ貢献 +1）');
+      }
     }catch(e){
       console.error(e);
       showToast("更新に失敗: " + (e.code || e.message || e));
@@ -1778,10 +1788,10 @@ async function saveRegistration(){
     showScreen('homeScreen');
     renderCardList();
     // ご褒美演出（ランク／ゲージ）
-    const prevCount = getMyCount();
-    const newCount = prevCount + 1;
-    setMyCount(newCount);
-    showRegistrationReward(prevCount, newCount);
+    const prevTotal = getContribution();
+    setMyCount(getMyCount() + 1);
+    const newTotal = getContribution();
+    showReward(prevTotal, newTotal, 'register');
   }catch(e){
     console.error(e);
     showToast("保存に失敗: " + (e.message || e));
@@ -1973,15 +1983,25 @@ const RANKS = [
   { min:250, name:'レジェンド', icon:'🏆' }
 ];
 const MYCOUNT_KEY = 'jihanki_mycount';
+const MYEDITS_KEY = 'jihanki_myedits';
 
+let myCountMem = 0, myEditsMem = 0;
 function getMyCount(){
   try{ return parseInt(localStorage.getItem(MYCOUNT_KEY) || '0', 10) || 0; }catch(e){ return myCountMem; }
 }
-let myCountMem = 0;
 function setMyCount(n){
   myCountMem = n;
   try{ localStorage.setItem(MYCOUNT_KEY, String(n)); }catch(e){}
 }
+function getMyEdits(){
+  try{ return parseInt(localStorage.getItem(MYEDITS_KEY) || '0', 10) || 0; }catch(e){ return myEditsMem; }
+}
+function setMyEdits(n){
+  myEditsMem = n;
+  try{ localStorage.setItem(MYEDITS_KEY, String(n)); }catch(e){}
+}
+// 貢献ポイント = 登録 + メンテ更新
+function getContribution(){ return getMyCount() + getMyEdits(); }
 
 // count に対するランク情報（現ランク・次ランク・進捗0-1）
 function getRankInfo(count){
@@ -1999,12 +2019,13 @@ function getRankInfo(count){
 }
 
 function renderRankBadge(){
-  const count = getMyCount();
-  const info = getRankInfo(count);
+  const total = getContribution();
+  const info = getRankInfo(total);
   document.getElementById('rankBarIcon').textContent = info.rank.icon;
   const nameEl = document.getElementById('rankBarName');
-  nameEl.innerHTML = `${info.rank.name} ・ <span class="rb-count">${count}件</span>登録`
-    + (info.next ? `（あと${info.toNext}件で ${info.next.name}）` : '（最高ランク達成！）');
+  nameEl.innerHTML = `${info.rank.name} ・ <span class="rb-count">貢献${total}pt</span>`
+    + `<span class="rb-breakdown">（登録${getMyCount()}・更新${getMyEdits()}）</span>`
+    + (info.next ? `<br>あと${info.toNext}ptで ${info.next.name}` : '<br>最高ランク達成！');
   document.getElementById('rankBarFill').style.width = Math.round(info.progress * 100) + '%';
 }
 
@@ -2023,14 +2044,17 @@ function fireConfetti(){
   }
 }
 
-// 登録成功時のご褒美演出
-function showRegistrationReward(prevCount, newCount){
-  const prev = getRankInfo(prevCount);
-  const now = getRankInfo(newCount);
+// ご褒美演出（type: 'register'＝登録 / 'edit'＝メンテ更新）
+function showReward(prevTotal, newTotal, type){
+  const prev = getRankInfo(prevTotal);
+  const now = getRankInfo(newTotal);
   const rankedUp = now.idx > prev.idx;
 
   document.getElementById('rewardEmoji').textContent = now.rank.icon;
-  document.getElementById('rewardCount').textContent = `通算 ${newCount} 件目の登録！`;
+  document.getElementById('rewardTitle').textContent = (type === 'edit') ? '更新ありがとう！' : '登録ありがとう！';
+  document.getElementById('rewardCount').textContent = (type === 'edit')
+    ? `メンテ貢献 +1（貢献 ${newTotal}pt）`
+    : `通算 ${getMyCount()} 件目の登録！（貢献 ${newTotal}pt）`;
   document.getElementById('rewardRankName').textContent = now.rank.name;
   document.getElementById('rewardRankup').classList.toggle('show', rankedUp);
   document.getElementById('rewardGaugeLabel').textContent = now.next
