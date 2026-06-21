@@ -81,6 +81,10 @@
     -webkit-overflow-scrolling:touch;
   }
   .card-list-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;}
+  .head-btns{display:flex;gap:8px;flex-shrink:0;}
+  #homeMapWrap{position:relative;}
+  #homeMap{width:100%;height:60vh;min-height:340px;border-radius:14px;overflow:hidden;border:1px solid var(--line);z-index:1;}
+  .map-legend{position:absolute;left:10px;bottom:10px;z-index:500;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.2);}
   .card-list-title{font-size:13px;font-weight:700;color:var(--steel);letter-spacing:.3px;}
   .filter-btn{
     flex-shrink:0;background:#fff;border:1px solid var(--line);border-radius:999px;
@@ -456,9 +460,16 @@
   <div class="card-list" id="cardList">
     <div class="card-list-head">
       <span class="card-list-title" id="cardListTitle">近くの自販機</span>
-      <button class="filter-btn" id="filterBtn">🔍 絞り込み<span class="filter-count" id="filterCount" style="display:none;">0</span></button>
+      <div class="head-btns">
+        <button class="filter-btn" id="homeViewToggle">🗺 地図</button>
+        <button class="filter-btn" id="filterBtn">🔍 絞り込み<span class="filter-count" id="filterCount" style="display:none;">0</span></button>
+      </div>
     </div>
     <div id="cardsContainer"></div>
+    <div id="homeMapWrap" style="display:none;">
+      <div id="homeMap"></div>
+      <div class="map-legend">🟡 自分の登録 ・ 🔵 みんなの登録</div>
+    </div>
     <div class="home-footer">
       <a href="privacy.html">プライバシーポリシー</a>
       <span>・</span>
@@ -1376,7 +1387,78 @@ function renderCardList(){
       if(m) openDetail(m);
     });
   });
+
+  // 地図ビュー表示中ならピンも更新
+  if(homeView === 'map') renderHomeMap();
 }
+
+// ============================================================
+// Home Screen: 地図ビュー（自分の登録はゴールド表示）
+// ============================================================
+let homeView = 'list';
+let homeMap = null;
+let homeMarkersLayer = null;
+let homeUserMarker = null;
+
+function isOwnMachine(m){ return !!m.ownerUid && m.ownerUid === currentUid; }
+
+function setHomeView(view){
+  homeView = view;
+  const isMap = (view === 'map');
+  document.getElementById('cardsContainer').style.display = isMap ? 'none' : '';
+  document.getElementById('homeMapWrap').style.display = isMap ? '' : 'none';
+  const footer = document.querySelector('.home-footer');
+  if(footer) footer.style.display = isMap ? 'none' : '';
+  document.getElementById('homeViewToggle').textContent = isMap ? '☰ リスト' : '🗺 地図';
+  if(isMap){
+    renderHomeMap();
+    logEv('view_map');
+  }
+}
+
+function renderHomeMap(){
+  const center = (userLat !== null) ? [userLat, userLng] : TOKYO;
+  if(!homeMap){
+    homeMap = L.map('homeMap', { zoomControl:true, maxZoom:19 }).setView(center, 15);
+    addTileLayer(homeMap, 0);
+    homeMarkersLayer = L.layerGroup().addTo(homeMap);
+  }
+  setTimeout(() => { try{ homeMap.invalidateSize(); }catch(e){} }, 60);
+
+  homeMarkersLayer.clearLayers();
+  if(homeUserMarker){ homeMap.removeLayer(homeUserMarker); homeUserMarker = null; }
+  if(userLat !== null){
+    homeUserMarker = L.circleMarker([userLat, userLng], {
+      radius:7, color:'#fff', weight:2, fillColor:'#2a7de1', fillOpacity:1
+    }).addTo(homeMap).bindTooltip('現在地');
+  }
+
+  const list = machines.filter(matchesFilters);
+  const pts = [];
+  list.forEach(m => {
+    if(typeof m.lat !== 'number' || typeof m.lng !== 'number') return;
+    const own = isOwnMachine(m);
+    const marker = L.circleMarker([m.lat, m.lng], {
+      radius: own ? 10 : 8,
+      color: '#fff', weight: 2,
+      fillColor: own ? '#d4a13a' : '#3a6ea5',
+      fillOpacity: 0.95
+    }).addTo(homeMarkersLayer);
+    marker.on('click', () => openDetail(m));
+    pts.push([m.lat, m.lng]);
+  });
+
+  if(pts.length){
+    if(userLat !== null) pts.push([userLat, userLng]);
+    try{ homeMap.fitBounds(L.latLngBounds(pts), { padding:[40,40], maxZoom:17 }); }catch(e){}
+  } else {
+    homeMap.setView(center, 14);
+  }
+}
+
+document.getElementById('homeViewToggle').addEventListener('click', () => {
+  setHomeView(homeView === 'map' ? 'list' : 'map');
+});
 
 // ============================================================
 // Detail Modal
