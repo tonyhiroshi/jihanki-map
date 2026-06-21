@@ -403,6 +403,38 @@
   }
   .toast.show{opacity:1;}
 
+  /* ---- Success pop (保存・更新の完了演出) ---- */
+  .success-pop{
+    position:fixed;inset:0;z-index:5000;display:none;
+    align-items:center;justify-content:center;
+    background:rgba(8,12,18,.45);backdrop-filter:blur(2px);
+  }
+  .success-pop.show{display:flex;animation:successFade .2s ease;}
+  .success-card{
+    background:var(--paper);border-radius:22px;padding:28px 34px;text-align:center;
+    box-shadow:0 16px 44px rgba(0,0,0,.4);transform:scale(.85);
+    animation:successPop .4s cubic-bezier(.18,1.5,.4,1) forwards;
+    max-width:78vw;
+  }
+  .success-check{width:74px;height:74px;margin:0 auto 12px;display:block;}
+  .success-check circle{
+    stroke:var(--ok);stroke-width:5;fill:none;
+    stroke-dasharray:163;stroke-dashoffset:163;
+    animation:successCircle .5s ease forwards;
+  }
+  .success-check path{
+    stroke:var(--ok);stroke-width:6;fill:none;stroke-linecap:round;stroke-linejoin:round;
+    stroke-dasharray:50;stroke-dashoffset:50;
+    animation:successDraw .3s .38s ease forwards;
+  }
+  .success-title{font-size:18px;font-weight:800;color:var(--ink);letter-spacing:.3px;}
+  .success-sub{font-size:13px;color:#7a6e58;margin-top:6px;line-height:1.5;}
+  @keyframes successFade{from{opacity:0}to{opacity:1}}
+  @keyframes successPop{to{transform:scale(1)}}
+  @keyframes successCircle{to{stroke-dashoffset:0}}
+  @keyframes successDraw{to{stroke-dashoffset:0}}
+  html[data-theme="pastel"] .success-card{border-radius:28px;box-shadow:0 18px 50px rgba(125,99,196,.35);}
+
   /* ---- Rank bar (home header) ---- */
   .rank-bar{
     display:flex;align-items:center;gap:10px;margin-top:12px;
@@ -681,6 +713,18 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ===== 保存・更新の完了演出 ===== -->
+<div class="success-pop" id="successPop">
+  <div class="success-card">
+    <svg class="success-check" viewBox="0 0 60 60" aria-hidden="true">
+      <circle cx="30" cy="30" r="26"/>
+      <path d="M18 31 l8 8 l16 -18"/>
+    </svg>
+    <div class="success-title" id="successTitle">完了！</div>
+    <div class="success-sub" id="successSub"></div>
+  </div>
+</div>
 
 <!-- ===== Filter sheet ===== -->
 <div class="filter-sheet" id="filterSheet">
@@ -1015,6 +1059,24 @@ function showToast(msg){
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2200);
 }
+
+// 保存・更新の完了演出（チェックマークのアニメ＋メッセージ）
+let _successTimer = null;
+function showSuccess(title, sub, duration){
+  const pop = document.getElementById('successPop');
+  document.getElementById('successTitle').textContent = title || '完了！';
+  document.getElementById('successSub').textContent = sub || '';
+  // アニメーションを毎回最初から再生させる
+  pop.classList.remove('show');
+  void pop.offsetWidth;
+  pop.classList.add('show');
+  clearTimeout(_successTimer);
+  _successTimer = setTimeout(()=>pop.classList.remove('show'), duration || 1600);
+}
+document.getElementById('successPop').addEventListener('click', ()=>{
+  clearTimeout(_successTimer);
+  document.getElementById('successPop').classList.remove('show');
+});
 
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2373,7 +2435,7 @@ async function saveRegistration(){
       if(getRankInfo(newTotal).idx > getRankInfo(prevTotal).idx){
         showReward(prevTotal, newTotal, 'edit');
       } else {
-        showToast('情報を更新しました（メンテ貢献 +1）');
+        showSuccess('更新しました！', `情報をみんなに反映しました（メンテ貢献 +1 ・ 貢献 ${newTotal}pt）`);
       }
     }catch(e){
       console.error(e);
@@ -2872,7 +2934,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // アイコンを開き直せば必ず最新版になる。
 // ※リリースごとに APP_VERSION と version.json を更新すること（bump-version.ps1）
 // ============================================================
-const APP_VERSION = '2026.06.22.2';
+const APP_VERSION = '2026.06.22.3';
 let _lastUpdateCheck = 0;
 
 async function checkForUpdate(reg){
