@@ -1,6 +1,6 @@
 // 自販機マップ Service Worker
 // 方針：ネットワーク優先（オンライン時は常に最新を取得）＋オフライン時はキャッシュ
-const VERSION = '2026.06.22.1';
+const VERSION = '2026.06.22.2';
 const CACHE = 'jihanki-' + VERSION;
 const ASSETS = [
   'vending-map.html',
