@@ -12,8 +12,14 @@ service cloud.firestore {
                     && request.resource.data.maker is string
                     && request.resource.data.lat is number
                     && request.resource.data.lng is number;
-      // 更新・削除は投稿者本人のみ
-      allow update, delete: if request.auth != null
+      // 情報の更新はログインしていれば誰でも可（鮮度維持）。
+      // 変更できるのは商品系の項目のみ。位置・所有者・写真情報・作成日時は変更不可
+      // （許可リスト外のキーが含まれると拒否されるため、自動的に保護される）。
+      allow update: if request.auth != null
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['maker','products','pays','feature','price','note','updatedAt','lastEditUid']);
+      // 削除は投稿者本人のみ
+      allow delete: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid;
     }
 

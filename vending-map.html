@@ -184,9 +184,10 @@
   }
   .detail-overlay.show .detail-actions{display:flex;}
   .detail-actions button{
-    flex:1;padding:13px;border-radius:12px;font-size:14px;font-weight:700;border:none;cursor:pointer;
+    flex:1;padding:13px 8px;border-radius:12px;font-size:13px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;
   }
   .btn-navigate{background:var(--ok);color:#fff;}
+  .btn-edit{background:var(--steel);color:#fff;}
   .btn-delete{background:var(--neon);color:#fff;}
   .btn-report{background:#fff;color:#8a6c1e;border:1px solid var(--line) !important;}
   .btn-close-detail{background:#e7e1d0;color:#4a4233;}
@@ -436,6 +437,7 @@
   </div>
   <div class="detail-actions">
     <button class="btn-navigate" id="detailNavBtn">ここへ行く</button>
+    <button class="btn-edit" id="detailEditBtn">編集</button>
     <button class="btn-delete" id="detailDeleteBtn">削除</button>
     <button class="btn-report" id="detailReportBtn">通報</button>
     <button class="btn-close-detail" id="detailCloseBtn2">閉じる</button>
@@ -446,9 +448,9 @@
 <div class="screen" id="regScreen">
   <div class="reg-header">
     <button id="regBackBtn">戻る</button>
-    <span class="reg-title">自販機を登録</span>
+    <span class="reg-title" id="regTitle">自販機を登録</span>
   </div>
-  <div class="reg-steps">
+  <div class="reg-steps" id="regSteps">
     <div class="reg-step-indicator" id="regStep1Ind">1. 位置</div>
     <div class="reg-step-indicator" id="regStep2Ind">2. 写真</div>
     <div class="reg-step-indicator" id="regStep3Ind">3. 情報</div>
@@ -594,6 +596,8 @@ let regMap = null;
 let regMarker = null;
 let regUserMarker = null;
 let regStep = 1;
+let isEditMode = false;       // 既存自販機の情報編集モード
+let editingMachineId = null;
 
 // Navigation state
 let navMap = null;
@@ -752,6 +756,26 @@ async function createMachine(data){
   if(photos.length){
     await db.collection('photos').doc(ref.id).set({ photos, ownerUid: currentUid || null });
   }
+}
+
+// 既存自販機の情報更新（誰でも可。位置・写真・所有者は変更しない）
+async function updateMachine(id, fields){
+  if(useLocal){
+    const m = machines.find(x => x.id === id);
+    if(m){ Object.assign(m, fields, { updatedAt: Date.now() }); saveLocal(machines); renderCardList(); }
+    return;
+  }
+  if(!db) return;
+  await db.collection('machines').doc(id).update({
+    maker: fields.maker,
+    products: fields.products,
+    pays: fields.pays,
+    feature: fields.feature,
+    price: fields.price,
+    note: fields.note,
+    updatedAt: Date.now(),
+    lastEditUid: currentUid || null
+  });
 }
 
 async function deleteMachine(id){
@@ -1417,6 +1441,40 @@ document.getElementById('detailNavBtn').addEventListener('click', () => {
   closeDetail();
 });
 
+document.getElementById('detailEditBtn').addEventListener('click', () => {
+  if(!detailMachine) return;
+  startEdit(detailMachine);
+});
+
+// 既存自販機の情報を編集（情報ステップのみ表示）
+function startEdit(machine){
+  isEditMode = true;
+  editingMachineId = machine.id;
+  regLatLng = L.latLng(machine.lat, machine.lng); // 位置は維持（保存判定で使用）
+  regSelectedProducts = new Set(machine.products || []);
+  regSelectedPays = new Set(machine.pays || []);
+
+  // フォームに既存値をセット
+  document.getElementById('regMakerSelect').value = machine.maker || 'その他';
+  document.getElementById('regFeatureInput').value = machine.feature || '';
+  document.getElementById('regPriceInput').value = (machine.price !== null && machine.price !== undefined) ? machine.price : '';
+  document.getElementById('regNoteInput').value = machine.note || '';
+
+  // 情報ステップだけ表示
+  document.getElementById('regTitle').textContent = '情報を編集';
+  document.getElementById('regSteps').style.display = 'none';
+  document.getElementById('regSaveBtn').textContent = '更新する';
+  document.getElementById('regFormBackBtn').textContent = 'キャンセル';
+
+  closeDetail();
+  showScreen('regScreen');
+  regStep = 3;
+  document.getElementById('regMapStep').classList.remove('active');
+  document.getElementById('regPhotoStep').classList.remove('active');
+  document.getElementById('regFormStep').classList.add('active');
+  buildRegTagOptions();
+}
+
 document.getElementById('detailReportBtn').addEventListener('click', async () => {
   if(!detailMachine || !db) return;
   if(!confirm('この投稿を運営に通報しますか？\n（不適切な写真・誤った情報・いたずら等）')) return;
@@ -1438,11 +1496,19 @@ document.getElementById('detailReportBtn').addEventListener('click', async () =>
 // Registration Flow
 // ============================================================
 function startRegistration(){
+  isEditMode = false;
+  editingMachineId = null;
   regLatLng = null;
   regPhotos = [];
   regSelectedProducts = new Set();
   regSelectedPays = new Set();
   regStep = 1;
+
+  // 編集モードからのUIを通常登録に戻す
+  document.getElementById('regTitle').textContent = '自販機を登録';
+  document.getElementById('regSteps').style.display = '';
+  document.getElementById('regSaveBtn').textContent = '保存する';
+  document.getElementById('regFormBackBtn').textContent = '戻る';
 
   // テキスト入力をリセット
   ['regSearchInput','regFeatureInput','regPriceInput','regNoteInput'].forEach(id => {
@@ -1640,29 +1706,52 @@ async function saveRegistration(){
     showToast("位置が未設定です");
     return;
   }
-  if(!checkPostRate()) return;
+  if(!isEditMode && !checkPostRate()) return;
 
   const maker = document.getElementById('regMakerSelect').value;
   const note = document.getElementById('regNoteInput').value.trim();
   const feature = document.getElementById('regFeatureInput').value.trim();
   const priceRaw = document.getElementById('regPriceInput').value.trim();
   const price = priceRaw === '' ? null : Math.max(0, parseInt(priceRaw, 10) || 0);
-  const payload = {
-    lat: regLatLng.lat,
-    lng: regLatLng.lng,
+  const fields = {
     maker,
     products: Array.from(regSelectedProducts),
     pays: Array.from(regSelectedPays),
     feature,
     price,
-    note,
-    photos: regPhotos.slice(),
-    updatedAt: Date.now()
+    note
   };
 
   const saveBtn = document.getElementById('regSaveBtn');
   saveBtn.disabled = true;
+
+  // ===== 編集モード：既存自販機の情報を更新 =====
+  if(isEditMode){
+    saveBtn.textContent = '更新中...';
+    try{
+      await updateMachine(editingMachineId, fields);
+      isEditMode = false; editingMachineId = null;
+      showScreen('homeScreen');
+      renderCardList();
+      showToast('情報を更新しました');
+    }catch(e){
+      console.error(e);
+      showToast("更新に失敗: " + (e.code || e.message || e));
+    }finally{
+      saveBtn.disabled = false;
+      saveBtn.textContent = '更新する';
+    }
+    return;
+  }
+
+  // ===== 通常モード：新規登録 =====
   saveBtn.textContent = '保存中...';
+  const payload = Object.assign({}, fields, {
+    lat: regLatLng.lat,
+    lng: regLatLng.lng,
+    photos: regPhotos.slice(),
+    updatedAt: Date.now()
+  });
   try{
     await createMachine(payload);
     showScreen('homeScreen');
@@ -1691,6 +1780,11 @@ document.getElementById('regSearchInput').addEventListener('keydown', (e) => {
 });
 
 document.getElementById('regBackBtn').addEventListener('click', () => {
+  if(isEditMode){
+    isEditMode = false; editingMachineId = null;
+    showScreen('homeScreen');
+    return;
+  }
   if(regStep > 1){
     showRegStep(regStep - 1);
   } else {
@@ -1710,7 +1804,14 @@ document.getElementById('regPhotoBackBtn').addEventListener('click', () => showR
 
 document.getElementById('regPhotoNextBtn').addEventListener('click', () => showRegStep(3));
 
-document.getElementById('regFormBackBtn').addEventListener('click', () => showRegStep(2));
+document.getElementById('regFormBackBtn').addEventListener('click', () => {
+  if(isEditMode){
+    isEditMode = false; editingMachineId = null;
+    showScreen('homeScreen');
+  } else {
+    showRegStep(2);
+  }
+});
 
 document.getElementById('regSaveBtn').addEventListener('click', saveRegistration);
 
