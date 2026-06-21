@@ -92,6 +92,9 @@
   }
   .vm-card-price{color:var(--neon);font-weight:800;}
   .vm-card-products{font-size:11px;color:#7a6e58;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .home-footer{text-align:center;padding:18px 0 8px;font-size:12px;color:#9b9078;}
+  .home-footer a{color:var(--steel);text-decoration:none;}
+  .home-footer a:active{opacity:.7;}
 
   /* ---- Detail Modal ---- */
   .detail-overlay{
@@ -171,6 +174,7 @@
   }
   .btn-navigate{background:var(--ok);color:#fff;}
   .btn-delete{background:var(--neon);color:#fff;}
+  .btn-report{background:#fff;color:#8a6c1e;border:1px solid var(--line) !important;}
   .btn-close-detail{background:#e7e1d0;color:#4a4233;}
 
   /* ---- Registration Screen ---- */
@@ -398,6 +402,11 @@
   <div class="card-list" id="cardList">
     <div class="card-list-title" id="cardListTitle">近くの自販機</div>
     <div id="cardsContainer"></div>
+    <div class="home-footer">
+      <a href="privacy.html">プライバシーポリシー</a>
+      <span>・</span>
+      <a href="terms.html">利用規約</a>
+    </div>
   </div>
 </div>
 
@@ -414,6 +423,7 @@
   <div class="detail-actions">
     <button class="btn-navigate" id="detailNavBtn">ここへ行く</button>
     <button class="btn-delete" id="detailDeleteBtn">削除</button>
+    <button class="btn-report" id="detailReportBtn">通報</button>
     <button class="btn-close-detail" id="detailCloseBtn2">閉じる</button>
   </div>
 </div>
@@ -545,6 +555,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // ============================================================
 // Constants
@@ -597,6 +608,8 @@ const firebaseConfig = {
 };
 
 let db = null;
+let auth = null;
+let currentUid = null;          // 匿名ログインの利用者ID
 let useLocal = false;
 const LS_KEY = 'jihanki_machines';
 let storageAvailable = false;
@@ -636,6 +649,18 @@ function initFirebase(){
   db = firebase.firestore();
   const ml = document.getElementById('modeLabel');
   if(ml) ml.textContent = 'クラウド同期モード';
+  // 匿名ログイン（端末ごとに安定したIDを付与。荒らし対策・自分の投稿管理用）
+  try{
+    auth = firebase.auth();
+    auth.onAuthStateChanged(u => {
+      currentUid = u ? u.uid : null;
+      // 所有者判定が変わるので、開いている詳細を更新
+      if(detailMachine) updateDetailActions(detailMachine);
+    });
+    auth.signInAnonymously().catch(e => {
+      console.warn('匿名ログインに失敗（Authenticationの匿名ログインが未有効の可能性）:', e.code || e);
+    });
+  }catch(e){ console.warn('auth init failed', e); }
   return true;
 }
 
@@ -705,12 +730,13 @@ async function createMachine(data){
     lat: data.lat, lng: data.lng, maker: data.maker,
     products: data.products, pays: data.pays,
     feature: data.feature, price: data.price, note: data.note,
-    updatedAt: data.updatedAt, thumb, photoCount: photos.length
+    updatedAt: data.updatedAt, thumb, photoCount: photos.length,
+    ownerUid: currentUid || null, createdAt: Date.now()
   };
   const ref = await db.collection('machines').add(mainDoc);
   // 写真本体は別コレクションへ（詳細を開いたときだけ読み込まれる）
   if(photos.length){
-    await db.collection('photos').doc(ref.id).set({ photos });
+    await db.collection('photos').doc(ref.id).set({ photos, ownerUid: currentUid || null });
   }
 }
 
@@ -1222,7 +1248,24 @@ function openDetail(machine){
     <div class="d-updated">最終更新: ${timeAgo(machine.updatedAt)}</div>
   `;
 
+  updateDetailActions(machine);
   document.getElementById('detailOverlay').classList.add('show');
+}
+
+// 削除（自分の投稿のみ）／通報（他人の投稿）ボタンの出し分け
+function updateDetailActions(machine){
+  const delBtn = document.getElementById('detailDeleteBtn');
+  const repBtn = document.getElementById('detailReportBtn');
+  if(useLocal){
+    // ローカルモードは自分専用：削除可・通報不要
+    delBtn.style.display = '';
+    repBtn.style.display = 'none';
+    return;
+  }
+  const isOwner = !!machine.ownerUid && machine.ownerUid === currentUid;
+  // 旧データ（ownerUid無し）は誰の投稿か不明 → 削除は出さず通報のみ
+  delBtn.style.display = isOwner ? '' : 'none';
+  repBtn.style.display = isOwner ? 'none' : '';
 }
 
 function closeDetail(){
@@ -1358,6 +1401,23 @@ document.getElementById('detailNavBtn').addEventListener('click', () => {
   if(!detailMachine) return;
   openNavigation(detailMachine);
   closeDetail();
+});
+
+document.getElementById('detailReportBtn').addEventListener('click', async () => {
+  if(!detailMachine || !db) return;
+  if(!confirm('この投稿を運営に通報しますか？\n（不適切な写真・誤った情報・いたずら等）')) return;
+  try{
+    await db.collection('reports').add({
+      machineId: detailMachine.id,
+      maker: detailMachine.maker || '',
+      reporterUid: currentUid || null,
+      createdAt: Date.now()
+    });
+    showToast('通報しました。ご協力ありがとうございます');
+  }catch(e){
+    console.warn('report failed', e);
+    showToast('通報に失敗しました');
+  }
 });
 
 // ============================================================
@@ -1543,11 +1603,32 @@ function buildRegTagOptions(){
   });
 }
 
+// 連続投稿の抑制（荒らし対策）：10秒に1件・1時間に15件まで
+function checkPostRate(){
+  if(useLocal) return true;
+  const now = Date.now();
+  let times = [];
+  try{ times = JSON.parse(localStorage.getItem('jihanki_posttimes') || '[]'); }catch(e){ times = []; }
+  times = times.filter(t => now - t < 3600000); // 直近1時間
+  if(times.length && now - times[times.length - 1] < 10000){
+    showToast('少し時間をおいてから登録してください');
+    return false;
+  }
+  if(times.length >= 15){
+    showToast('短時間に登録しすぎです。しばらくお待ちください');
+    return false;
+  }
+  times.push(now);
+  try{ localStorage.setItem('jihanki_posttimes', JSON.stringify(times)); }catch(e){}
+  return true;
+}
+
 async function saveRegistration(){
   if(!regLatLng){
     showToast("位置が未設定です");
     return;
   }
+  if(!checkPostRate()) return;
 
   const maker = document.getElementById('regMakerSelect').value;
   const note = document.getElementById('regNoteInput').value.trim();
