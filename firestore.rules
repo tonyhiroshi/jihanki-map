@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 自販機（メタ情報＋サムネイル）
+    match /machines/{id} {
+      // 誰でも閲覧可（公開マップのため）
+      allow read: if true;
+      // 作成はログイン必須＋自分のIDを記録＋最低限の型チェック
+      allow create: if request.auth != null
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.maker is string
+                    && request.resource.data.lat is number
+                    && request.resource.data.lng is number;
+      // 更新・削除は投稿者本人のみ
+      allow update, delete: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // 写真本体（詳細表示時に読み込む）
+    match /photos/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // 通報（作成のみ許可。閲覧・編集・削除は管理者がコンソールで行う）
+    match /reports/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+  }
+}
