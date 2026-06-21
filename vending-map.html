@@ -298,6 +298,12 @@
     background:var(--paper);border-top:1px solid var(--line);
   }
   .reg-map-bottom .coord-text{flex:1;font-size:12px;color:#7a6e58;}
+  .reg-locate-btn{
+    background:#2a7de1;color:#fff;border:none;border-radius:10px;
+    padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;
+  }
+  .reg-locate-btn:disabled{opacity:.5;cursor:default;}
+  html[data-theme="pastel"] .reg-locate-btn{border-radius:14px;box-shadow:0 4px 12px rgba(42,125,225,.3);}
   .reg-next-btn{
     background:var(--coin);color:#241a05;border:none;border-radius:10px;
     padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;
@@ -564,13 +570,14 @@
   <div class="reg-body">
     <!-- Step 1: Map -->
     <div class="reg-map-step" id="regMapStep">
-      <div class="reg-map-instruction">住所で検索するか、位置を地図上でタップしてください</div>
+      <div class="reg-map-instruction">「📍現在地」で今いる場所に合わせるか、住所検索・地図タップで位置を指定してください</div>
       <div class="reg-search-bar">
         <input type="text" id="regSearchInput" placeholder="住所で検索（例: 大田区池上6-27-14）" autocomplete="off">
         <button type="button" id="regSearchBtn">検索</button>
       </div>
       <div id="regMap"></div>
       <div class="reg-map-bottom">
+        <button class="reg-locate-btn" id="regLocateBtn" type="button">📍 現在地</button>
         <span class="coord-text" id="regCoordText">未選択</span>
         <button class="reg-next-btn" id="regMapNextBtn" disabled>次へ</button>
       </div>
@@ -2076,20 +2083,7 @@ function startRegistration(){
     regMap = L.map('regMap', {zoomControl:true, maxZoom:19}).setView(center, 16);
     addTileLayer(regMap, 0);
 
-    regMap.on('click', (e) => {
-      regLatLng = e.latlng;
-      if(regMarker) regMap.removeLayer(regMarker);
-      regMarker = L.marker([e.latlng.lat, e.latlng.lng], {
-        icon: L.divIcon({
-          className: '',
-          html: '<div style="width:20px;height:20px;background:var(--ok,#3aa66b);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);"></div>',
-          iconSize: [20,20],
-          iconAnchor: [10,10]
-        })
-      }).addTo(regMap);
-      document.getElementById('regCoordText').textContent = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
-      document.getElementById('regMapNextBtn').disabled = false;
-    });
+    regMap.on('click', (e) => { setRegPin(e.latlng.lat, e.latlng.lng); });
   } else {
     const center = (userLat !== null) ? [userLat, userLng] : TOKYO;
     regMap.setView(center, 16);
@@ -2129,6 +2123,61 @@ function showRegUserLocation(){
   regUserMarker = L.circleMarker([userLat, userLng], {
     radius: 8, color:'#fff', weight:2, fillColor:'#2a7de1', fillOpacity:1
   }).addTo(regMap).bindTooltip('現在地', {permanent:false});
+}
+
+// 登録ピンを指定座標に立てる（地図クリック・現在地ボタンの共通処理）
+function setRegPin(lat, lng){
+  if(!regMap) return;
+  regLatLng = L.latLng(lat, lng);
+  if(regMarker) regMap.removeLayer(regMarker);
+  regMarker = L.marker([lat, lng], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="width:20px;height:20px;background:var(--ok,#3aa66b);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);"></div>',
+      iconSize: [20,20],
+      iconAnchor: [10,10]
+    })
+  }).addTo(regMap);
+  document.getElementById('regCoordText').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  document.getElementById('regMapNextBtn').disabled = false;
+}
+
+// 「現在地」ボタン：GPSを取り直して（高精度・キャッシュ無視）その場にピンを立てる
+let regLocating = false;
+function locateRegCurrent(){
+  if(regLocating) return;
+  if(!navigator.geolocation){ showToast('この端末は位置情報に対応していません'); return; }
+  const btn = document.getElementById('regLocateBtn');
+  regLocating = true;
+  if(btn){ btn.disabled = true; btn.textContent = '取得中…'; }
+  const coordEl = document.getElementById('regCoordText');
+  const prevCoord = coordEl ? coordEl.textContent : '';
+  if(coordEl) coordEl.textContent = '現在地を取得中...';
+  const reset = () => {
+    regLocating = false;
+    if(btn){ btn.disabled = false; btn.textContent = '📍 現在地'; }
+  };
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      const acc = Math.round(pos.coords.accuracy || 0);
+      showRegUserLocation();
+      regMap.setView([userLat, userLng], 18);
+      setRegPin(userLat, userLng);  // 現在地にピンを設定
+      showToast(acc ? `現在地を設定しました（誤差±${acc}m）` : '現在地を設定しました');
+      reset();
+    },
+    err => {
+      if(coordEl) coordEl.textContent = prevCoord || '未選択';
+      const msg = (err && err.code === 1)
+        ? '位置情報が許可されていません。端末の設定をご確認ください'
+        : '現在地を取得できませんでした。少し移動して再度お試しください';
+      showToast(msg);
+      reset();
+    },
+    {enableHighAccuracy:true, timeout:12000, maximumAge:0}
+  );
 }
 
 function showRegStep(step){
@@ -2384,6 +2433,7 @@ document.getElementById('regBackBtn').addEventListener('click', () => {
   }
 });
 
+document.getElementById('regLocateBtn').addEventListener('click', locateRegCurrent);
 document.getElementById('regMapNextBtn').addEventListener('click', () => {
   if(!regLatLng){
     showToast("位置を地図上でタップしてください");
@@ -2816,7 +2866,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // アイコンを開き直せば必ず最新版になる。
 // ※リリースごとに APP_VERSION と version.json を更新すること（bump-version.ps1）
 // ============================================================
-const APP_VERSION = '2026.06.21.1';
+const APP_VERSION = '2026.06.22.1';
 let _lastUpdateCheck = 0;
 
 async function checkForUpdate(reg){
