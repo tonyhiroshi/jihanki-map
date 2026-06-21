@@ -2809,32 +2809,65 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 })();
 
 // ============================================================
-// Service Worker（ホーム画面アプリの自動更新）
-// ネットワーク優先で、アプリを開くたびに最新コードを取得する
+// 自動更新（ホーム画面アプリ対応）
+// サーバーの version.json と、このHTMLに埋め込んだ APP_VERSION を比較し、
+// 違えば自動でキャッシュを破棄してリロードする。
+// バックグラウンド復帰（visibilitychange）でも発火するので、
+// アイコンを開き直せば必ず最新版になる。
+// ※リリースごとに APP_VERSION と version.json を更新すること（bump-version.ps1）
 // ============================================================
+const APP_VERSION = '2026.06.21.1';
+let _lastUpdateCheck = 0;
+
+async function checkForUpdate(reg){
+  // 連続発火を抑制（30秒に1回まで）
+  const now = Date.now();
+  if(now - _lastUpdateCheck < 30000) return;
+  _lastUpdateCheck = now;
+  try{
+    const res = await fetch('version.json?t=' + now, { cache: 'no-store' });
+    if(!res.ok) return;
+    const data = await res.json();
+    const latest = data && data.version;
+    if(!latest || latest === APP_VERSION) return;
+    // 同じ新版で二重リロードしないようガード
+    if(sessionStorage.getItem('jihanki_reloaded_for') === latest) return;
+    sessionStorage.setItem('jihanki_reloaded_for', latest);
+    // SW更新＋全キャッシュ破棄
+    try{ if(reg) await reg.update(); }catch(e){}
+    try{
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }catch(e){}
+    location.reload();
+  }catch(e){ /* オフライン等は無視 */ }
+}
+
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(reg => {
-      // 起動時に更新チェック
       reg.update();
-      // 新しいバージョンを検知したら取り込む
-      reg.addEventListener('updatefound', () => {
-        const nw = reg.installing;
-        if(nw) nw.addEventListener('statechange', () => {
-          if(nw.state === 'installed' && navigator.serviceWorker.controller){
-            // 新版が利用可能 → 次回起動時に自動で反映される
-          }
-        });
+      checkForUpdate(reg);
+      // バックグラウンドから復帰したとき・再フォーカス時に更新確認
+      document.addEventListener('visibilitychange', () => {
+        if(document.visibilityState === 'visible') checkForUpdate(reg);
+      });
+      window.addEventListener('focus', () => checkForUpdate(reg));
+      window.addEventListener('pageshow', () => checkForUpdate(reg));
+      // SWが新版に切り替わったら一度だけリロード
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if(refreshing) return;
+        refreshing = true;
+        location.reload();
       });
     }).catch(() => {});
-
-    // SWが更新されたら一度だけリロードして最新を反映
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if(refreshing) return;
-      refreshing = true;
-      window.location.reload();
-    });
+  });
+} else {
+  // Service Worker非対応環境でもバージョン確認は行う
+  window.addEventListener('load', () => checkForUpdate(null));
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'visible') checkForUpdate(null);
   });
 }
 </script>
