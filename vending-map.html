@@ -758,14 +758,15 @@ async function createMachine(data){
   }
 }
 
-// 既存自販機の情報更新（誰でも可。位置・写真・所有者は変更しない）
-async function updateMachine(id, fields){
+// 既存自販機の更新（誰でも可。位置・所有者は変更しない。写真は差し替え可）
+async function updateMachine(id, fields, photos){
   if(useLocal){
     const m = machines.find(x => x.id === id);
-    if(m){ Object.assign(m, fields, { updatedAt: Date.now() }); saveLocal(machines); renderCardList(); }
+    if(m){ Object.assign(m, fields, { photos: photos.slice(), photoCount: photos.length, updatedAt: Date.now() }); saveLocal(machines); renderCardList(); }
     return;
   }
   if(!db) return;
+  const thumb = photos.length ? await makeThumb(photos[0]) : '';
   await db.collection('machines').doc(id).update({
     maker: fields.maker,
     products: fields.products,
@@ -773,9 +774,18 @@ async function updateMachine(id, fields){
     feature: fields.feature,
     price: fields.price,
     note: fields.note,
+    thumb,
+    photoCount: photos.length,
     updatedAt: Date.now(),
     lastEditUid: currentUid || null
   });
+  // 写真本体を差し替え
+  if(photos.length){
+    await db.collection('photos').doc(id).set({ photos, ownerUid: currentUid || null });
+  } else {
+    await db.collection('photos').doc(id).delete().catch(()=>{});
+  }
+  delete photoCache[id]; // キャッシュを無効化して次回再取得
 }
 
 async function deleteMachine(id){
@@ -1446,13 +1456,14 @@ document.getElementById('detailEditBtn').addEventListener('click', () => {
   startEdit(detailMachine);
 });
 
-// 既存自販機の情報を編集（情報ステップのみ表示）
-function startEdit(machine){
+// 既存自販機を編集（写真→情報の順。位置は変更しない）
+async function startEdit(machine){
   isEditMode = true;
   editingMachineId = machine.id;
-  regLatLng = L.latLng(machine.lat, machine.lng); // 位置は維持（保存判定で使用）
+  regLatLng = L.latLng(machine.lat, machine.lng); // 位置は維持
   regSelectedProducts = new Set(machine.products || []);
   regSelectedPays = new Set(machine.pays || []);
+  regPhotos = [];
 
   // フォームに既存値をセット
   document.getElementById('regMakerSelect').value = machine.maker || 'その他';
@@ -1460,19 +1471,29 @@ function startEdit(machine){
   document.getElementById('regPriceInput').value = (machine.price !== null && machine.price !== undefined) ? machine.price : '';
   document.getElementById('regNoteInput').value = machine.note || '';
 
-  // 情報ステップだけ表示
+  // 編集モードのUI（位置ステップは無し）
   document.getElementById('regTitle').textContent = '情報を編集';
   document.getElementById('regSteps').style.display = 'none';
   document.getElementById('regSaveBtn').textContent = '更新する';
-  document.getElementById('regFormBackBtn').textContent = 'キャンセル';
+  document.getElementById('regFormBackBtn').textContent = '戻る';
 
   closeDetail();
   showScreen('regScreen');
-  regStep = 3;
+  // 写真ステップから開始
+  regStep = 2;
   document.getElementById('regMapStep').classList.remove('active');
-  document.getElementById('regPhotoStep').classList.remove('active');
-  document.getElementById('regFormStep').classList.add('active');
-  buildRegTagOptions();
+  document.getElementById('regFormStep').classList.remove('active');
+  document.getElementById('regPhotoStep').classList.add('active');
+  renderRegPhotoStep();
+
+  // 既存写真を読み込んで表示（差し替え・削除できるように）
+  try{
+    const existing = await fetchPhotos(machine);
+    if(isEditMode && editingMachineId === machine.id){
+      regPhotos = existing.slice();
+      renderRegPhotoStep();
+    }
+  }catch(e){ /* 写真取得失敗時は0枚から */ }
 }
 
 document.getElementById('detailReportBtn').addEventListener('click', async () => {
@@ -1729,7 +1750,7 @@ async function saveRegistration(){
   if(isEditMode){
     saveBtn.textContent = '更新中...';
     try{
-      await updateMachine(editingMachineId, fields);
+      await updateMachine(editingMachineId, fields, regPhotos.slice());
       isEditMode = false; editingMachineId = null;
       showScreen('homeScreen');
       renderCardList();
@@ -1781,8 +1802,12 @@ document.getElementById('regSearchInput').addEventListener('keydown', (e) => {
 
 document.getElementById('regBackBtn').addEventListener('click', () => {
   if(isEditMode){
-    isEditMode = false; editingMachineId = null;
-    showScreen('homeScreen');
+    if(regStep === 3){
+      showRegStep(2); // 情報→写真へ戻る
+    } else {
+      isEditMode = false; editingMachineId = null;
+      showScreen('homeScreen');
+    }
     return;
   }
   if(regStep > 1){
@@ -1800,18 +1825,19 @@ document.getElementById('regMapNextBtn').addEventListener('click', () => {
   showRegStep(2);
 });
 
-document.getElementById('regPhotoBackBtn').addEventListener('click', () => showRegStep(1));
-
-document.getElementById('regPhotoNextBtn').addEventListener('click', () => showRegStep(3));
-
-document.getElementById('regFormBackBtn').addEventListener('click', () => {
+document.getElementById('regPhotoBackBtn').addEventListener('click', () => {
   if(isEditMode){
+    // 編集モードでは写真が最初のステップ → 戻る＝キャンセル
     isEditMode = false; editingMachineId = null;
     showScreen('homeScreen');
   } else {
-    showRegStep(2);
+    showRegStep(1);
   }
 });
+
+document.getElementById('regPhotoNextBtn').addEventListener('click', () => showRegStep(3));
+
+document.getElementById('regFormBackBtn').addEventListener('click', () => showRegStep(2));
 
 document.getElementById('regSaveBtn').addEventListener('click', saveRegistration);
 

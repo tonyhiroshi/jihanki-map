@@ -12,24 +12,22 @@ service cloud.firestore {
                     && request.resource.data.maker is string
                     && request.resource.data.lat is number
                     && request.resource.data.lng is number;
-      // 情報の更新はログインしていれば誰でも可（鮮度維持）。
-      // 変更できるのは商品系の項目のみ。位置・所有者・写真情報・作成日時は変更不可
+      // 情報・写真の更新はログインしていれば誰でも可（鮮度維持）。
+      // 変更できるのは下記のキーのみ。位置・所有者・作成日時は変更不可
       // （許可リスト外のキーが含まれると拒否されるため、自動的に保護される）。
       allow update: if request.auth != null
                     && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['maker','products','pays','feature','price','note','updatedAt','lastEditUid']);
+                         .hasOnly(['maker','products','pays','feature','price','note','updatedAt','lastEditUid','thumb','photoCount']);
       // 削除は投稿者本人のみ
       allow delete: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid;
     }
 
-    // 写真本体（詳細表示時に読み込む）
+    // 写真本体（詳細表示時に読み込む）。
+    // 編集機能で誰でも差し替えられるよう、ログインユーザーは書き込み可。
     match /photos/{id} {
       allow read: if true;
-      allow create: if request.auth != null
-                    && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if request.auth != null
-                    && resource.data.ownerUid == request.auth.uid;
+      allow write: if request.auth != null;
     }
 
     // 通報（作成のみ許可。閲覧・編集・削除は管理者がコンソールで行う）
