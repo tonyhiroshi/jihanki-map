@@ -2614,6 +2614,36 @@ function geolocateUser(){
   renderRankBadge();
   geolocateUser();
 })();
+
+// ============================================================
+// Service Worker（ホーム画面アプリの自動更新）
+// ネットワーク優先で、アプリを開くたびに最新コードを取得する
+// ============================================================
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // 起動時に更新チェック
+      reg.update();
+      // 新しいバージョンを検知したら取り込む
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if(nw) nw.addEventListener('statechange', () => {
+          if(nw.state === 'installed' && navigator.serviceWorker.controller){
+            // 新版が利用可能 → 次回起動時に自動で反映される
+          }
+        });
+      });
+    }).catch(() => {});
+
+    // SWが更新されたら一度だけリロードして最新を反映
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if(refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+  });
+}
 </script>
 </body>
 </html>
