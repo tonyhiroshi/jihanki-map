@@ -468,7 +468,7 @@
     <div id="cardsContainer"></div>
     <div id="homeMapWrap" style="display:none;">
       <div id="homeMap"></div>
-      <div class="map-legend">🟡 自分の登録 ・ 🔵 みんなの登録</div>
+      <div class="map-legend">🔵 現在地 ・ 🟡 自分の登録 ・ 🔴 みんなの登録</div>
     </div>
     <div class="home-footer">
       <a href="privacy.html">プライバシーポリシー</a>
@@ -1427,11 +1427,6 @@ function renderHomeMap(){
 
   homeMarkersLayer.clearLayers();
   if(homeUserMarker){ homeMap.removeLayer(homeUserMarker); homeUserMarker = null; }
-  if(userLat !== null){
-    homeUserMarker = L.circleMarker([userLat, userLng], {
-      radius:7, color:'#fff', weight:2, fillColor:'#2a7de1', fillOpacity:1
-    }).addTo(homeMap).bindTooltip('現在地');
-  }
 
   const list = machines.filter(matchesFilters);
   const pts = [];
@@ -1441,12 +1436,22 @@ function renderHomeMap(){
     const marker = L.circleMarker([m.lat, m.lng], {
       radius: own ? 10 : 8,
       color: '#fff', weight: 2,
-      fillColor: own ? '#d4a13a' : '#3a6ea5',
+      fillColor: own ? '#d4a13a' : '#e0533f',
       fillOpacity: 0.95
     }).addTo(homeMarkersLayer);
     marker.on('click', () => openDetail(m));
     pts.push([m.lat, m.lng]);
   });
+
+  // 現在地（自販機ピンと区別しやすいよう、青のハロー＋白縁ドット。最前面）
+  if(userLat !== null){
+    L.circleMarker([userLat, userLng], {
+      radius:18, weight:0, fillColor:'#1e88e5', fillOpacity:0.18, interactive:false
+    }).addTo(homeMarkersLayer);
+    homeUserMarker = L.circleMarker([userLat, userLng], {
+      radius:9, color:'#fff', weight:3, fillColor:'#1e88e5', fillOpacity:1
+    }).addTo(homeMarkersLayer).bindTooltip('現在地');
+  }
 
   if(pts.length){
     if(userLat !== null) pts.push([userLat, userLng]);
