@@ -6,7 +6,7 @@
 <title>自販機マップ | Jihanki Map</title>
 <meta name="description" content="みんなで登録・更新するご近所の自販機データベース">
 <!-- PWA / ホーム画面追加 -->
-<meta name="theme-color" content="#9a82d6">
+<meta name="theme-color" content="#2b3a4a" id="themeColorMeta">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -35,6 +35,17 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
 <style>
   :root{
+    --ink:#10151c;
+    --paper:#f3efe4;
+    --steel:#2b3a4a;
+    --steel-deep:#1a2530;
+    --coin:#d4a13a;
+    --neon:#ff5a3c;
+    --ok:#3aa66b;
+    --line:#c9c2ac;
+    --soft:#e7e1d0;
+  }
+  html[data-theme="pastel"]{
     --ink:#4a4356;
     --paper:#fff7f0;
     --steel:#9a82d6;
@@ -43,6 +54,7 @@
     --neon:#fb6f91;
     --ok:#46c19b;
     --line:#f0ddd0;
+    --soft:#efe6f7;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;background:var(--paper);font-family:'Segoe UI',-apple-system,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;color:var(--ink);overflow:hidden;}
@@ -125,7 +137,7 @@
   }
   .filter-chips .chip.sel{background:var(--steel);color:#fff;border-color:var(--steel);}
   .filter-actions{display:flex;gap:10px;padding:14px 16px;border-top:1px solid var(--line);}
-  .filter-clear{flex:1;background:#efe6f7;color:#4a4233;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;}
+  .filter-clear{flex:1;background:var(--soft);color:#4a4233;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;}
   .filter-apply{flex:2;background:var(--ok);color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;}
   .empty-msg{
     text-align:center;padding:48px 20px;color:#8a7e6a;font-size:14px;line-height:1.7;
@@ -139,7 +151,7 @@
   .vm-card:active{box-shadow:0 2px 12px rgba(0,0,0,.12);}
   .vm-card-photo{
     width:72px;height:72px;border-radius:10px;overflow:hidden;flex-shrink:0;
-    background:#efe6f7;display:flex;align-items:center;justify-content:center;
+    background:var(--soft);display:flex;align-items:center;justify-content:center;
     font-size:28px;color:#b8ad96;
   }
   .vm-card-photo img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -236,7 +248,7 @@
   .btn-edit{background:var(--steel);color:#fff;}
   .btn-delete{background:var(--neon);color:#fff;}
   .btn-report{background:#fff;color:#8a6c1e;border:1px solid var(--line) !important;}
-  .btn-close-detail{background:#efe6f7;color:#4a4233;}
+  .btn-close-detail{background:var(--soft);color:#4a4233;}
 
   /* ---- Registration Screen ---- */
   #regScreen{background:var(--paper);}
@@ -297,7 +309,7 @@
   .reg-photo-step.active{display:flex;}
   .reg-photo-step .photo-preview{
     flex:none;display:flex;align-items:center;justify-content:center;
-    background:#efe6f7;border-radius:14px;overflow:hidden;margin-bottom:14px;
+    background:var(--soft);border-radius:14px;overflow:hidden;margin-bottom:14px;
     height:38vh;min-height:180px;
   }
   .reg-photo-step .photo-preview img{max-width:100%;max-height:100%;object-fit:contain;}
@@ -322,7 +334,7 @@
   .reg-photo-bottom button{
     flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;
   }
-  .btn-back{background:#efe6f7;color:#4a4233;}
+  .btn-back{background:var(--soft);color:#4a4233;}
 
   /* Step 3: Details Form */
   .reg-form-step{flex:1;display:none;flex-direction:column;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
@@ -439,22 +451,25 @@
   .confetti{position:absolute;top:-12px;width:9px;height:14px;opacity:.9;border-radius:2px;animation:confettiFall linear forwards;}
   @keyframes confettiFall{ to{transform:translateY(420px) rotate(540deg);opacity:0;} }
 
+  .theme-toggle{display:block;margin:10px auto 0;background:rgba(255,255,255,.12);color:var(--paper);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;}
+  .theme-toggle:active{opacity:.8;}
+
   /* Leaflet overrides */
   .leaflet-popup-content-wrapper{border-radius:16px;}
   .leaflet-popup-content{margin:12px 14px;font-size:13px;}
 
-  /* pastel polish: rounder + soft shadows */
-  .register-btn{border-radius:20px;box-shadow:0 8px 22px rgba(251,111,145,.38);}
-  .vm-card{border-radius:22px;border-color:#f2e6f8;box-shadow:0 6px 18px rgba(154,130,214,.14);}
-  .vm-card-photo{border-radius:16px;}
-  .rank-bar{border-radius:18px;}
-  .filter-btn,.chip,.tagopt,.vm-card-dist{border-radius:999px;}
-  .detail-actions button,.reg-next-btn,.btn-save,.btn-back,.reg-form-actions button,.reg-photo-bottom button{border-radius:16px;}
-  .reward-card{border-radius:28px;box-shadow:0 18px 50px rgba(125,99,196,.4);}
-  .reg-search-bar input,.field input,.field select,.filter-apply,.filter-clear{border-radius:14px;}
-  #homeMap,#regMap{border-radius:18px;}
-  .map-legend{border-radius:999px;}
-  .toast{border-radius:999px;}
+  /* pastel polish (pastelテーマ時のみ) */
+  html[data-theme="pastel"] .register-btn{border-radius:20px;box-shadow:0 8px 22px rgba(251,111,145,.38);}
+  html[data-theme="pastel"] .vm-card{border-radius:22px;border-color:#f2e6f8;box-shadow:0 6px 18px rgba(154,130,214,.14);}
+  html[data-theme="pastel"] .vm-card-photo{border-radius:16px;}
+  html[data-theme="pastel"] .rank-bar{border-radius:18px;}
+  html[data-theme="pastel"] .filter-btn,html[data-theme="pastel"] .chip,html[data-theme="pastel"] .tagopt,html[data-theme="pastel"] .vm-card-dist{border-radius:999px;}
+  html[data-theme="pastel"] .detail-actions button,html[data-theme="pastel"] .reg-next-btn,html[data-theme="pastel"] .btn-save,html[data-theme="pastel"] .btn-back,html[data-theme="pastel"] .reg-form-actions button,html[data-theme="pastel"] .reg-photo-bottom button{border-radius:16px;}
+  html[data-theme="pastel"] .reward-card{border-radius:28px;box-shadow:0 18px 50px rgba(125,99,196,.4);}
+  html[data-theme="pastel"] .reg-search-bar input,html[data-theme="pastel"] .field input,html[data-theme="pastel"] .field select,html[data-theme="pastel"] .filter-apply,html[data-theme="pastel"] .filter-clear{border-radius:14px;}
+  html[data-theme="pastel"] #homeMap,html[data-theme="pastel"] #regMap{border-radius:18px;}
+  html[data-theme="pastel"] .map-legend{border-radius:999px;}
+  html[data-theme="pastel"] .toast{border-radius:999px;}
 </style>
 </head>
 <body>
@@ -473,6 +488,7 @@
       </div>
     </div>
     <div class="mode-label" id="modeLabel"></div>
+    <button class="theme-toggle" id="themeToggle">🎨 きせかえ：クール</button>
   </div>
   <div class="card-list" id="cardList">
     <div class="card-list-head">
@@ -1886,9 +1902,11 @@ async function generateShareCard(machine){
   const x = cv.getContext('2d');
   const JP = '"Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",sans-serif';
 
-  // 背景グラデ（パステルラベンダー）
+  // 背景グラデ（現在のテーマに合わせる）
+  const _isPastel = document.documentElement.dataset.theme === 'pastel';
   const g = x.createLinearGradient(0,0,0,S);
-  g.addColorStop(0,'#9a82d6'); g.addColorStop(1,'#7d63c4');
+  if(_isPastel){ g.addColorStop(0,'#9a82d6'); g.addColorStop(1,'#7d63c4'); }
+  else { g.addColorStop(0,'#2b3a4a'); g.addColorStop(1,'#10151c'); }
   x.fillStyle = g; x.fillRect(0,0,S,S);
 
   // 写真エリア
@@ -2624,6 +2642,29 @@ function geolocateUser(){
 // ============================================================
 // Init
 // ============================================================
+// ===== きせかえ（テーマ切替）：デフォルトはクール（前バージョン） =====
+const THEME_KEY = 'jihanki_theme';
+function applyTheme(theme){
+  if(theme === 'pastel'){ document.documentElement.dataset.theme = 'pastel'; }
+  else { delete document.documentElement.dataset.theme; }
+  const tc = document.getElementById('themeColorMeta');
+  if(tc) tc.setAttribute('content', theme === 'pastel' ? '#9a82d6' : '#2b3a4a');
+  const btn = document.getElementById('themeToggle');
+  if(btn) btn.textContent = (theme === 'pastel') ? '🎨 きせかえ：パステル' : '🎨 きせかえ：クール';
+}
+(function initTheme(){
+  let t = 'steel';
+  try{ t = localStorage.getItem(THEME_KEY) || 'steel'; }catch(e){}
+  applyTheme(t);
+})();
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const cur = (document.documentElement.dataset.theme === 'pastel') ? 'pastel' : 'steel';
+  const next = (cur === 'pastel') ? 'steel' : 'pastel';
+  try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
+  applyTheme(next);
+  showToast(next === 'pastel' ? 'パステルに切り替えました🌸' : 'クールに切り替えました');
+});
+
 (function init(){
   const ok = initFirebase();
   if(ok) subscribeMachines();
