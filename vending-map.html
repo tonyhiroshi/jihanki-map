@@ -80,7 +80,45 @@
     flex:1;overflow-y:auto;padding:12px 16px 80px;
     -webkit-overflow-scrolling:touch;
   }
-  .card-list-title{font-size:13px;font-weight:700;color:var(--steel);margin-bottom:10px;letter-spacing:.3px;}
+  .card-list-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;}
+  .card-list-title{font-size:13px;font-weight:700;color:var(--steel);letter-spacing:.3px;}
+  .filter-btn{
+    flex-shrink:0;background:#fff;border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;font-size:12px;font-weight:700;color:var(--steel);cursor:pointer;display:flex;align-items:center;gap:5px;
+  }
+  .filter-btn:active{background:#f0ece2;}
+  .filter-btn.on{background:var(--steel);color:#fff;border-color:var(--steel);}
+  .filter-count{
+    background:var(--neon);color:#fff;border-radius:999px;min-width:18px;height:18px;
+    font-size:11px;line-height:18px;text-align:center;padding:0 4px;
+  }
+  /* Filter bottom sheet */
+  .filter-sheet{
+    display:none;position:fixed;inset:0;z-index:120;background:rgba(8,12,18,.5);
+    align-items:flex-end;justify-content:center;
+  }
+  .filter-sheet.show{display:flex;}
+  .filter-panel{
+    width:100%;max-width:560px;background:var(--paper);border-radius:18px 18px 0 0;
+    max-height:82vh;display:flex;flex-direction:column;animation:sheetUp .25s ease;
+  }
+  @keyframes sheetUp{ from{transform:translateY(100%);} to{transform:translateY(0);} }
+  .filter-head{
+    display:flex;align-items:center;justify-content:space-between;padding:16px;
+    font-size:16px;font-weight:800;border-bottom:1px solid var(--line);
+  }
+  .filter-head button{background:none;border:none;font-size:18px;color:#888;cursor:pointer;}
+  .filter-body{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
+  .filter-sec{margin-bottom:18px;}
+  .filter-label{font-size:12px;font-weight:700;color:var(--steel-deep);margin-bottom:8px;}
+  .filter-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .filter-chips .chip{
+    border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font-size:13px;cursor:pointer;user-select:none;
+  }
+  .filter-chips .chip.sel{background:var(--steel);color:#fff;border-color:var(--steel);}
+  .filter-actions{display:flex;gap:10px;padding:14px 16px;border-top:1px solid var(--line);}
+  .filter-clear{flex:1;background:#e7e1d0;color:#4a4233;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;}
+  .filter-apply{flex:2;background:var(--ok);color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;}
   .empty-msg{
     text-align:center;padding:48px 20px;color:#8a7e6a;font-size:14px;line-height:1.7;
   }
@@ -122,7 +160,7 @@
     background:linear-gradient(180deg,var(--steel) 0%,var(--steel-deep) 100%);
     color:var(--paper);
   }
-  .detail-header .detail-title{font-size:16px;font-weight:700;}
+  .detail-header .detail-title{font-size:16px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .detail-header button{background:none;border:none;color:var(--paper);font-size:14px;cursor:pointer;padding:6px 10px;border-radius:8px;}
   .detail-header button:active{background:rgba(255,255,255,.1);}
   .detail-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
@@ -416,7 +454,10 @@
     <div class="mode-label" id="modeLabel"></div>
   </div>
   <div class="card-list" id="cardList">
-    <div class="card-list-title" id="cardListTitle">近くの自販機</div>
+    <div class="card-list-head">
+      <span class="card-list-title" id="cardListTitle">近くの自販機</span>
+      <button class="filter-btn" id="filterBtn">🔍 絞り込み<span class="filter-count" id="filterCount" style="display:none;">0</span></button>
+    </div>
     <div id="cardsContainer"></div>
     <div class="home-footer">
       <a href="privacy.html">プライバシーポリシー</a>
@@ -430,6 +471,7 @@
 <div class="detail-overlay" id="detailOverlay">
   <div class="detail-header">
     <span class="detail-title" id="detailTitle">詳細</span>
+    <button id="detailShareBtn">📤 シェア</button>
     <button id="detailCloseBtn">閉じる</button>
   </div>
   <div class="detail-body">
@@ -549,6 +591,34 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- ===== Filter sheet ===== -->
+<div class="filter-sheet" id="filterSheet">
+  <div class="filter-panel">
+    <div class="filter-head">
+      <span>絞り込み</span>
+      <button id="filterCloseBtn">✕</button>
+    </div>
+    <div class="filter-body">
+      <div class="filter-sec">
+        <div class="filter-label">価格（目玉商品）</div>
+        <div class="filter-chips" id="filterPriceChips"></div>
+      </div>
+      <div class="filter-sec">
+        <div class="filter-label">対応決済方法</div>
+        <div class="filter-chips" id="filterPayChips"></div>
+      </div>
+      <div class="filter-sec">
+        <div class="filter-label">商品</div>
+        <div class="filter-chips" id="filterProductChips"></div>
+      </div>
+    </div>
+    <div class="filter-actions">
+      <button class="filter-clear" id="filterClearBtn">クリア</button>
+      <button class="filter-apply" id="filterApplyBtn">表示する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== Reward overlay (gamification) ===== -->
 <div class="reward-overlay" id="rewardOverlay">
   <div class="reward-card" id="rewardCard">
@@ -573,6 +643,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
 <script>
 // ============================================================
 // Constants
@@ -628,7 +699,13 @@ const firebaseConfig = {
 
 let db = null;
 let auth = null;
+let analytics = null;
 let currentUid = null;          // 匿名ログインの利用者ID
+
+// アクセス解析（失敗しても本体に影響しないよう安全に呼ぶ）
+function logEv(name, params){
+  try{ if(analytics) analytics.logEvent(name, params || {}); }catch(e){}
+}
 let useLocal = false;
 const LS_KEY = 'jihanki_machines';
 let storageAvailable = false;
@@ -666,6 +743,7 @@ function initFirebase(){
   }
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  try{ analytics = firebase.analytics(); }catch(e){ console.warn('analytics init failed', e); }
   const ml = document.getElementById('modeLabel');
   if(ml) ml.textContent = 'クラウド同期モード';
   // 匿名ログイン（端末ごとに安定したIDを付与。荒らし対策・自分の投稿管理用）
@@ -1105,6 +1183,7 @@ async function searchRegAddress(){
     }
     if(regMap){
       regMap.flyTo([hit.lat, hit.lon], zoom, {duration: 0.8});
+      logEv('search_address');
     }
   } finally {
     btn.disabled = false;
@@ -1128,8 +1207,101 @@ function showScreen(id){
 }
 
 // ============================================================
-// Home Screen: Card List
+// Home Screen: Card List + 絞り込み
 // ============================================================
+const PRICE_OPTIONS = [
+  { label: '指定なし', max: null },
+  { label: '〜100円', max: 100 },
+  { label: '〜120円', max: 120 },
+  { label: '〜150円', max: 150 }
+];
+let activeFilters = { priceMax: null, pays: new Set(), products: new Set() };
+
+function activeFilterCount(){
+  return (activeFilters.priceMax !== null ? 1 : 0) + activeFilters.pays.size + activeFilters.products.size;
+}
+
+// フィルタ条件に一致するか
+function matchesFilters(m){
+  if(activeFilters.priceMax !== null){
+    if(m.price === null || m.price === undefined || m.price === '' || Number(m.price) > activeFilters.priceMax) return false;
+  }
+  for(const p of activeFilters.pays){ if(!(m.pays || []).includes(p)) return false; }
+  for(const p of activeFilters.products){ if(!(m.products || []).includes(p)) return false; }
+  return true;
+}
+
+// 絞り込みシートのチップを構築
+function buildFilterChips(){
+  const priceWrap = document.getElementById('filterPriceChips');
+  priceWrap.innerHTML = '';
+  PRICE_OPTIONS.forEach(opt => {
+    const el = document.createElement('div');
+    el.className = 'chip' + (activeFilters.priceMax === opt.max ? ' sel' : '');
+    el.textContent = opt.label;
+    el.onclick = () => {
+      activeFilters.priceMax = opt.max;
+      priceWrap.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
+      el.classList.add('sel');
+    };
+    priceWrap.appendChild(el);
+  });
+
+  const mkChips = (wrap, options, set) => {
+    wrap.innerHTML = '';
+    options.forEach(p => {
+      const el = document.createElement('div');
+      el.className = 'chip' + (set.has(p) ? ' sel' : '');
+      el.textContent = p;
+      el.onclick = () => {
+        if(set.has(p)) set.delete(p); else set.add(p);
+        el.classList.toggle('sel');
+      };
+      wrap.appendChild(el);
+    });
+  };
+  mkChips(document.getElementById('filterPayChips'), PAY_OPTIONS, activeFilters.pays);
+  mkChips(document.getElementById('filterProductChips'), PRODUCT_OPTIONS, activeFilters.products);
+}
+
+function openFilterSheet(){
+  buildFilterChips();
+  document.getElementById('filterSheet').classList.add('show');
+}
+function closeFilterSheet(){
+  document.getElementById('filterSheet').classList.remove('show');
+}
+function updateFilterButton(){
+  const n = activeFilterCount();
+  const btn = document.getElementById('filterBtn');
+  const cnt = document.getElementById('filterCount');
+  btn.classList.toggle('on', n > 0);
+  cnt.style.display = n > 0 ? '' : 'none';
+  cnt.textContent = n;
+}
+
+document.getElementById('filterBtn').addEventListener('click', openFilterSheet);
+document.getElementById('filterCloseBtn').addEventListener('click', closeFilterSheet);
+document.getElementById('filterSheet').addEventListener('click', (e) => {
+  if(e.target.id === 'filterSheet') closeFilterSheet();
+});
+document.getElementById('filterClearBtn').addEventListener('click', () => {
+  activeFilters = { priceMax: null, pays: new Set(), products: new Set() };
+  buildFilterChips();
+  updateFilterButton();
+  renderCardList();
+});
+document.getElementById('filterApplyBtn').addEventListener('click', () => {
+  closeFilterSheet();
+  updateFilterButton();
+  renderCardList();
+  logEv('apply_filter', {
+    price_max: activeFilters.priceMax || 0,
+    pays: Array.from(activeFilters.pays).join(','),
+    products: Array.from(activeFilters.products).join(',')
+  });
+});
+
 // 目玉商品＋金額の表示（カード・詳細で共用）
 function buildFeatureHtml(m){
   const hasFeature = m.feature && m.feature.trim() !== '';
@@ -1150,8 +1322,18 @@ function renderCardList(){
     return;
   }
 
+  // 絞り込みを適用
+  const filtered = machines.filter(matchesFilters);
+  const hasFilter = activeFilterCount() > 0;
+
+  if(filtered.length === 0){
+    title.textContent = hasFilter ? `絞り込み結果（0件）` : '';
+    container.innerHTML = '<div class="empty-msg">条件に合う自販機がありません。<br>絞り込みを変えてみてください。</div>';
+    return;
+  }
+
   // Sort by distance from user
-  let sorted = machines.map(m => {
+  let sorted = filtered.map(m => {
     let dist = null;
     if(userLat !== null && userLng !== null){
       dist = haversineDistance(userLat, userLng, m.lat, m.lng);
@@ -1163,7 +1345,7 @@ function renderCardList(){
     sorted.sort((a, b) => (a._dist || 0) - (b._dist || 0));
   }
 
-  title.textContent = `近くの自販機（${sorted.length}件）`;
+  title.textContent = hasFilter ? `絞り込み結果（${sorted.length}件）` : `近くの自販機（${sorted.length}件）`;
 
   container.innerHTML = sorted.map(m => {
     const thumbSrc = m.thumb || (m.photos && m.photos.length ? m.photos[0] : null);
@@ -1254,6 +1436,7 @@ async function renderDetailPhotosFor(machine){
 function openDetail(machine){
   detailMachine = machine;
   detailPhotoIndex = 0;
+  logEv('view_machine', { maker: machine.maker || '' });
 
   document.getElementById('detailTitle').textContent = machine.maker || '詳細';
 
@@ -1515,6 +1698,143 @@ document.getElementById('detailReportBtn').addEventListener('click', async () =>
 });
 
 // ============================================================
+// 共有カード（SNS映え画像）生成
+// ============================================================
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+function loadImg(src){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+// 折り返しなしで幅に収める（はみ出しは…）
+function fitText(ctx, text, maxW){
+  if(ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while(t.length > 1 && ctx.measureText(t + '…').width > maxW){ t = t.slice(0, -1); }
+  return t + '…';
+}
+
+async function generateShareCard(machine){
+  const S = 1080;
+  const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  const x = cv.getContext('2d');
+  const JP = '"Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",sans-serif';
+
+  // 背景グラデ
+  const g = x.createLinearGradient(0,0,0,S);
+  g.addColorStop(0,'#2b3a4a'); g.addColorStop(1,'#10151c');
+  x.fillStyle = g; x.fillRect(0,0,S,S);
+
+  // 写真エリア
+  const px=60, py=60, pw=S-120, ph=560;
+  roundRectPath(x, px, py, pw, ph, 28); x.save(); x.clip();
+  let photoSrc = null;
+  if(machine.photos && machine.photos.length) photoSrc = machine.photos[0];
+  else if(machine.photoCount){ try{ const arr = await fetchPhotos(machine); photoSrc = arr[0] || null; }catch(e){} }
+  else if(machine.thumb) photoSrc = machine.thumb;
+  const img = photoSrc ? await loadImg(photoSrc) : null;
+  if(img){
+    // cover
+    const ar = img.width/img.height, tr = pw/ph;
+    let dw, dh, dx, dy;
+    if(ar > tr){ dh = ph; dw = ph*ar; dx = px-(dw-pw)/2; dy = py; }
+    else { dw = pw; dh = pw/ar; dx = px; dy = py-(dh-ph)/2; }
+    x.drawImage(img, dx, dy, dw, dh);
+  } else {
+    x.fillStyle = '#e7e1d0'; x.fillRect(px,py,pw,ph);
+    x.fillStyle = '#b8ad96'; x.font = `160px ${JP}`; x.textAlign='center'; x.textBaseline='middle';
+    x.fillText('🥤', S/2, py+ph/2); x.textAlign='left'; x.textBaseline='alphabetic';
+  }
+  x.restore();
+
+  // メーカー名
+  x.fillStyle = '#fff'; x.font = `bold 62px ${JP}`;
+  x.fillText(fitText(x, machine.maker || '自販機', pw), px, 712);
+
+  let cy = 770;
+  // 目玉商品＋価格
+  const hasFeature = machine.feature && machine.feature.trim() !== '';
+  const hasPrice = (machine.price !== null && machine.price !== undefined && machine.price !== '');
+  if(hasFeature || hasPrice){
+    x.font = `bold 46px ${JP}`;
+    const star = '⭐ ';
+    x.fillStyle = '#ffd980';
+    const fname = hasFeature ? machine.feature : '目玉商品';
+    const ftext = star + fname;
+    x.fillText(fitText(x, ftext, pw-220), px, cy);
+    if(hasPrice){
+      x.fillStyle = '#ff8a3c'; x.textAlign='right';
+      x.fillText('¥' + Number(machine.price).toLocaleString(), S-60, cy);
+      x.textAlign='left';
+    }
+    cy += 66;
+  }
+  // 商品
+  if(machine.products && machine.products.length){
+    x.fillStyle = '#cfe0ee'; x.font = `36px ${JP}`;
+    x.fillText(fitText(x, '商品: ' + machine.products.join('・'), pw), px, cy); cy += 54;
+  }
+  // 決済
+  if(machine.pays && machine.pays.length){
+    x.fillStyle = '#9fd3b3'; x.font = `36px ${JP}`;
+    x.fillText(fitText(x, '決済: ' + machine.pays.join('・'), pw), px, cy); cy += 54;
+  }
+
+  // フッター（ブランド）
+  x.fillStyle = 'rgba(255,255,255,.5)'; x.font = `30px ${JP}`;
+  x.fillText('📍 自販機マップ  —  tonyhiroshi.github.io/jihanki-map', px, S-54);
+
+  return cv;
+}
+
+async function shareMachine(machine){
+  showToast('シェア画像を作成中...');
+  let cv;
+  try{ cv = await generateShareCard(machine); }
+  catch(e){ console.warn('share card failed', e); showToast('画像の作成に失敗しました'); return; }
+  logEv('share_card', { maker: machine.maker || '' });
+
+  const fname = `jihanki_${(machine.maker||'machine')}.png`;
+  // Web Share API（対応端末はSNS/LINEへ直接共有）
+  cv.toBlob(async (blob) => {
+    if(!blob){ showToast('画像の作成に失敗しました'); return; }
+    const file = new File([blob], fname, { type: 'image/png' });
+    const shareData = {
+      files: [file],
+      title: '自販機マップ',
+      text: `${machine.maker || '自販機'} の情報をシェア｜自販機マップ`
+    };
+    try{
+      if(navigator.canShare && navigator.canShare({ files: [file] })){
+        await navigator.share(shareData);
+        return;
+      }
+    }catch(e){ /* キャンセル等はダウンロードにフォールバック */ }
+    // フォールバック：ダウンロード
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    showToast('画像を保存しました');
+  }, 'image/png');
+}
+
+document.getElementById('detailShareBtn').addEventListener('click', () => {
+  if(detailMachine) shareMachine(detailMachine);
+});
+
+// ============================================================
 // Registration Flow
 // ============================================================
 function startRegistration(){
@@ -1752,6 +2072,7 @@ async function saveRegistration(){
     saveBtn.textContent = '更新中...';
     try{
       await updateMachine(editingMachineId, fields, regPhotos.slice());
+      logEv('edit_machine', { maker: fields.maker });
       isEditMode = false; editingMachineId = null;
       showScreen('homeScreen');
       renderCardList();
@@ -1785,6 +2106,7 @@ async function saveRegistration(){
   });
   try{
     await createMachine(payload);
+    logEv('register_machine', { maker: payload.maker, has_photo: payload.photos.length > 0 });
     showScreen('homeScreen');
     renderCardList();
     // ご褒美演出（ランク／ゲージ）
@@ -1855,6 +2177,7 @@ document.getElementById('regSaveBtn').addEventListener('click', saveRegistration
 // Navigation Screen
 // ============================================================
 function openNavigation(machine){
+  logEv('start_navigation', { maker: machine.maker || '' });
   showScreen('navScreen');
   document.getElementById('navDest').textContent = machine.maker + (machine.note ? ' - ' + machine.note : '');
 
