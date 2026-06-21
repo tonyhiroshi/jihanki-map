@@ -454,6 +454,25 @@
   .theme-toggle{display:block;margin:10px auto 0;background:rgba(255,255,255,.12);color:var(--paper);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;}
   .theme-toggle:active{opacity:.8;}
 
+  /* ランキング */
+  .rank-overlay{display:none;position:fixed;inset:0;z-index:130;background:rgba(8,12,18,.5);align-items:flex-end;justify-content:center;}
+  .rank-overlay.show{display:flex;}
+  .rank-sheet{width:100%;max-width:560px;background:var(--paper);border-radius:18px 18px 0 0;max-height:86vh;display:flex;flex-direction:column;}
+  .rank-head{display:flex;align-items:center;justify-content:space-between;padding:16px;font-size:17px;font-weight:800;border-bottom:1px solid var(--line);}
+  .rank-head button{background:none;border:none;font-size:18px;color:#999;cursor:pointer;}
+  .rank-you{padding:12px 16px;background:var(--soft);font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .rank-you .edit-nick{background:var(--steel);color:#fff;border:none;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;}
+  .rank-tabs{display:flex;border-bottom:1px solid var(--line);}
+  .rank-tab{flex:1;background:none;border:none;padding:12px;font-size:14px;font-weight:700;color:#999;cursor:pointer;border-bottom:3px solid transparent;}
+  .rank-tab.active{color:var(--steel);border-bottom-color:var(--coin);}
+  .rank-list{flex:1;overflow-y:auto;padding:6px 0 20px;-webkit-overflow-scrolling:touch;}
+  .rank-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid rgba(0,0,0,.06);}
+  .rank-row.me{background:rgba(212,161,58,.14);}
+  .rank-row .rk{width:36px;text-align:center;font-weight:800;font-size:15px;color:var(--steel);}
+  .rank-row .nm{flex:1;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .rank-row .pt{font-weight:800;color:var(--neon);font-size:14px;}
+  .rank-empty{text-align:center;color:#999;padding:34px 20px;font-size:13px;line-height:1.7;}
+
   /* Leaflet overrides */
   .leaflet-popup-content-wrapper{border-radius:16px;}
   .leaflet-popup-content{margin:12px 14px;font-size:13px;}
@@ -629,6 +648,22 @@
   <div class="nav-bottom">
     <span class="nav-dest" id="navDest"></span>
     <span class="nav-dist" id="navDistLabel"></span>
+  </div>
+</div>
+
+<!-- ===== ランキング ===== -->
+<div class="rank-overlay" id="rankOverlay">
+  <div class="rank-sheet">
+    <div class="rank-head">
+      <span>🏆 貢献ランキング</span>
+      <button id="rankCloseBtn">✕</button>
+    </div>
+    <div class="rank-you" id="rankYou"></div>
+    <div class="rank-tabs">
+      <button class="rank-tab active" id="rankTabWeek" data-period="week">今週</button>
+      <button class="rank-tab" id="rankTabAll" data-period="all">累計</button>
+    </div>
+    <div class="rank-list" id="rankList"></div>
   </div>
 </div>
 
@@ -2279,6 +2314,7 @@ async function saveRegistration(){
       setMyEdits(getMyEdits() + 1);
       const newTotal = getContribution();
       renderRankBadge();
+      recordContribution('edit');
       if(getRankInfo(newTotal).idx > getRankInfo(prevTotal).idx){
         showReward(prevTotal, newTotal, 'edit');
       } else {
@@ -2312,6 +2348,7 @@ async function saveRegistration(){
     setMyCount(getMyCount() + 1);
     const newTotal = getContribution();
     showReward(prevTotal, newTotal, 'register');
+    recordContribution('register');
   }catch(e){
     console.error(e);
     showToast("保存に失敗: " + (e.message || e));
@@ -2642,6 +2679,104 @@ function geolocateUser(){
 // ============================================================
 // Init
 // ============================================================
+// ============================================================
+// 貢献ランキング（Firestore users コレクション）
+// ============================================================
+function currentWeekId(){
+  const d = new Date();
+  const day = (d.getDay()+6)%7;
+  d.setHours(0,0,0,0); d.setDate(d.getDate()-day);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function myNickname(){ try{ return localStorage.getItem('jihanki_nick')||''; }catch(e){ return ''; } }
+function autoName(uid){ return 'ハンター#' + (uid ? uid.slice(0,4) : '????'); }
+function displayName(u){ return (u && u.nickname && u.nickname.trim()) ? u.nickname : autoName(u && u.id); }
+
+async function recordContribution(type){
+  if(useLocal || !db || !currentUid) return;
+  const ref = db.collection('users').doc(currentUid);
+  const wk = currentWeekId();
+  try{
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const d = snap.exists ? snap.data() : {};
+      const sameWeek = d.weekId === wk;
+      tx.set(ref, {
+        total: (d.total||0) + 1,
+        registrations: (d.registrations||0) + (type==='register'?1:0),
+        edits: (d.edits||0) + (type==='edit'?1:0),
+        weekId: wk,
+        weekPoints: (sameWeek ? (d.weekPoints||0) : 0) + 1,
+        nickname: myNickname(),
+        updatedAt: Date.now()
+      }, { merge: true });
+    });
+  }catch(e){ console.warn('contribution record failed', e); }
+}
+
+let rankPeriod = 'week';
+async function renderRanking(){
+  const listEl = document.getElementById('rankList');
+  const youEl = document.getElementById('rankYou');
+  youEl.innerHTML = '<span>あなた：<b>' + escapeHtml(myNickname() || autoName(currentUid)) + '</b></span>' +
+    '<button class="edit-nick" id="editNickBtn">ニックネーム変更</button>';
+  document.getElementById('editNickBtn').onclick = editNickname;
+
+  if(useLocal || !db){
+    listEl.innerHTML = '<div class="rank-empty">ランキングはクラウド同期モードでのみ利用できます。</div>';
+    return;
+  }
+  listEl.innerHTML = '<div class="rank-empty">読み込み中...</div>';
+  try{
+    let users = [];
+    if(rankPeriod === 'all'){
+      const s = await db.collection('users').orderBy('total','desc').limit(20).get();
+      users = s.docs.map(d=>({id:d.id, ...d.data(), _pt:(d.data().total||0)})).filter(u=>u._pt>0);
+    } else {
+      const wk = currentWeekId();
+      const s = await db.collection('users').orderBy('weekPoints','desc').limit(50).get();
+      users = s.docs.map(d=>({id:d.id, ...d.data()}))
+        .filter(u => u.weekId === wk && (u.weekPoints||0) > 0)
+        .slice(0,20).map(u=>({...u, _pt:(u.weekPoints||0)}));
+    }
+    if(!users.length){
+      listEl.innerHTML = '<div class="rank-empty">まだ記録がありません。<br>自販機を登録・更新してランキングに参加しよう！</div>';
+      return;
+    }
+    listEl.innerHTML = users.map((u,i)=>{
+      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+      const me = (u.id === currentUid) ? ' me' : '';
+      const youTag = me ? ' <span style="color:var(--coin)">(あなた)</span>' : '';
+      return '<div class="rank-row'+me+'"><div class="rk">'+medal+'</div><div class="nm">'+escapeHtml(displayName(u))+youTag+'</div><div class="pt">'+u._pt+'pt</div></div>';
+    }).join('');
+  }catch(e){
+    console.warn('ranking load failed', e);
+    listEl.innerHTML = '<div class="rank-empty">ランキングの取得に失敗しました。</div>';
+  }
+}
+function openRanking(){
+  logEv('view_ranking');
+  document.getElementById('rankOverlay').classList.add('show');
+  renderRanking();
+}
+function editNickname(){
+  const v = prompt('ニックネームを入力（12文字まで・空欄で匿名）', myNickname());
+  if(v === null) return;
+  const nn = v.trim().slice(0,12);
+  try{ localStorage.setItem('jihanki_nick', nn); }catch(e){}
+  if(db && currentUid && !useLocal){
+    db.collection('users').doc(currentUid).set({ nickname: nn, updatedAt: Date.now() }, { merge:true }).catch(()=>{});
+  }
+  renderRanking();
+  showToast('ニックネームを更新しました');
+}
+document.getElementById('rankCloseBtn').addEventListener('click', () => document.getElementById('rankOverlay').classList.remove('show'));
+document.getElementById('rankOverlay').addEventListener('click', (e) => { if(e.target.id==='rankOverlay') e.currentTarget.classList.remove('show'); });
+document.getElementById('rankTabWeek').addEventListener('click', () => { rankPeriod='week'; document.getElementById('rankTabWeek').classList.add('active'); document.getElementById('rankTabAll').classList.remove('active'); renderRanking(); });
+document.getElementById('rankTabAll').addEventListener('click', () => { rankPeriod='all'; document.getElementById('rankTabAll').classList.add('active'); document.getElementById('rankTabWeek').classList.remove('active'); renderRanking(); });
+document.getElementById('rankBar').addEventListener('click', openRanking);
+document.getElementById('rankBar').style.cursor = 'pointer';
+
 // ===== きせかえ（テーマ切替）：デフォルトはクール（前バージョン） =====
 const THEME_KEY = 'jihanki_theme';
 function applyTheme(theme){
