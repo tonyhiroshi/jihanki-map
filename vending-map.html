@@ -1737,22 +1737,22 @@ async function generateShareCard(machine){
   x.fillStyle = g; x.fillRect(0,0,S,S);
 
   // 写真エリア
-  const px=60, py=60, pw=S-120, ph=560;
+  const px=60, py=60, pw=S-120, ph=600;
   roundRectPath(x, px, py, pw, ph, 28); x.save(); x.clip();
+  // 余白用の暗色背景（写真全体を見せても自然に見えるように）
+  x.fillStyle = '#0d1117'; x.fillRect(px, py, pw, ph);
   let photoSrc = null;
   if(machine.photos && machine.photos.length) photoSrc = machine.photos[0];
   else if(machine.photoCount){ try{ const arr = await fetchPhotos(machine); photoSrc = arr[0] || null; }catch(e){} }
   else if(machine.thumb) photoSrc = machine.thumb;
   const img = photoSrc ? await loadImg(photoSrc) : null;
   if(img){
-    // cover
-    const ar = img.width/img.height, tr = pw/ph;
-    let dw, dh, dx, dy;
-    if(ar > tr){ dh = ph; dw = ph*ar; dx = px-(dw-pw)/2; dy = py; }
-    else { dw = pw; dh = pw/ar; dx = px; dy = py-(dh-ph)/2; }
+    // contain（全体を表示・見切れ防止）
+    const scale = Math.min(pw / img.width, ph / img.height);
+    const dw = img.width * scale, dh = img.height * scale;
+    const dx = px + (pw - dw) / 2, dy = py + (ph - dh) / 2;
     x.drawImage(img, dx, dy, dw, dh);
   } else {
-    x.fillStyle = '#e7e1d0'; x.fillRect(px,py,pw,ph);
     x.fillStyle = '#b8ad96'; x.font = `160px ${JP}`; x.textAlign='center'; x.textBaseline='middle';
     x.fillText('🥤', S/2, py+ph/2); x.textAlign='left'; x.textBaseline='alphabetic';
   }
@@ -1760,9 +1760,9 @@ async function generateShareCard(machine){
 
   // メーカー名
   x.fillStyle = '#fff'; x.font = `bold 62px ${JP}`;
-  x.fillText(fitText(x, machine.maker || '自販機', pw), px, 712);
+  x.fillText(fitText(x, machine.maker || '自販機', pw), px, 748);
 
-  let cy = 770;
+  let cy = 806;
   // 目玉商品＋価格
   const hasFeature = machine.feature && machine.feature.trim() !== '';
   const hasPrice = (machine.price !== null && machine.price !== undefined && machine.price !== '');
