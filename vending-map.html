@@ -643,6 +643,42 @@ function subscribeMachines(){
   );
 }
 
+// カード用の極小サムネイルを生成（通信量削減）
+function makeThumb(dataUrl, size=96, quality=0.55){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let w = img.width, h = img.height;
+      if(w > h && w > size){ h = Math.round(h*size/w); w = size; }
+      else if(h > size){ w = Math.round(w*size/h); h = size; }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, w, h);
+      try{ resolve(c.toDataURL('image/jpeg', quality)); }catch(e){ resolve(''); }
+    };
+    img.onerror = ()=>resolve('');
+    img.src = dataUrl;
+  });
+}
+
+// 取得済み写真のキャッシュ（id -> [dataURL]）
+const photoCache = {};
+
+// 詳細表示用に写真本体を取得（インライン優先→別コレクションから遅延取得）
+async function fetchPhotos(machine){
+  if(machine.photos && machine.photos.length) return machine.photos; // 旧形式/ローカル
+  if(!machine.photoCount) return [];
+  if(photoCache[machine.id]) return photoCache[machine.id];
+  if(!db) return [];
+  try{
+    const snap = await db.collection('photos').doc(machine.id).get();
+    const arr = (snap.exists && snap.data() && snap.data().photos) ? snap.data().photos : [];
+    photoCache[machine.id] = arr;
+    return arr;
+  }catch(e){ console.warn('photo fetch failed', e); return []; }
+}
+
 async function createMachine(data){
   if(useLocal){
     data.id = 'local_' + Date.now();
@@ -652,7 +688,20 @@ async function createMachine(data){
     return;
   }
   if(!db) return;
-  await db.collection('machines').add(data);
+  const photos = data.photos || [];
+  const thumb = photos.length ? await makeThumb(photos[0]) : '';
+  // メイン文書は軽量（写真本体は含めない）
+  const mainDoc = {
+    lat: data.lat, lng: data.lng, maker: data.maker,
+    products: data.products, pays: data.pays,
+    feature: data.feature, price: data.price, note: data.note,
+    updatedAt: data.updatedAt, thumb, photoCount: photos.length
+  };
+  const ref = await db.collection('machines').add(mainDoc);
+  // 写真本体は別コレクションへ（詳細を開いたときだけ読み込まれる）
+  if(photos.length){
+    await db.collection('photos').doc(ref.id).set({ photos });
+  }
 }
 
 async function deleteMachine(id){
@@ -666,6 +715,8 @@ async function deleteMachine(id){
   if(!db) return;
   try{
     await db.collection('machines').doc(id).delete();
+    db.collection('photos').doc(id).delete().catch(()=>{}); // 写真本体も削除（ベストエフォート）
+    delete photoCache[id];
     showToast("削除しました");
   }catch(e){
     showToast("削除に失敗しました");
@@ -1030,8 +1081,9 @@ function renderCardList(){
   title.textContent = `近くの自販機（${sorted.length}件）`;
 
   container.innerHTML = sorted.map(m => {
-    const photoHtml = (m.photos && m.photos.length)
-      ? `<img src="${m.photos[0]}" alt="">`
+    const thumbSrc = m.thumb || (m.photos && m.photos.length ? m.photos[0] : null);
+    const photoHtml = thumbSrc
+      ? `<img src="${thumbSrc}" alt="" loading="lazy">`
       : '🥤';
     const distText = m._dist !== null ? formatDistance(m._dist) : '';
     const productsText = (m.products && m.products.length) ? m.products.join('・') : '';
@@ -1062,52 +1114,66 @@ function renderCardList(){
 // ============================================================
 // Detail Modal
 // ============================================================
+// 写真スライドを描画（スワイプ・タップ拡大つき）
+function renderDetailPhotos(photos){
+  const photosEl = document.getElementById('detailPhotos');
+  if(!photos || photos.length === 0){
+    photosEl.innerHTML = '<div class="no-photo">🥤</div>';
+    return;
+  }
+  const slidesHtml = photos.map(p => `<div class="swipe-slide"><img src="${p}"></div>`).join('');
+  const dotsHtml = photos.length > 1
+    ? '<div class="photo-dots">' + photos.map((_, i) => `<span class="${i===0?'active':''}"></span>`).join('') + '</div>'
+    : '';
+  photosEl.innerHTML = `<div class="swipe-container" id="swipeContainer">${slidesHtml}</div>${dotsHtml}`;
+
+  let suppressTap = false;
+  photosEl.querySelectorAll('.swipe-slide img').forEach((imgEl, i) => {
+    imgEl.addEventListener('click', () => {
+      if(suppressTap){ suppressTap = false; return; }
+      openPhotoViewer(photos[detailPhotoIndex] || photos[i]);
+    });
+  });
+
+  if(photos.length > 1){
+    const swipeCont = document.getElementById('swipeContainer');
+    swipeCont.addEventListener('touchstart', (e) => {
+      swipeStartX = e.touches[0].clientX;
+    }, {passive:true});
+    swipeCont.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - swipeStartX;
+      if(Math.abs(dx) > 50){
+        suppressTap = true;
+        if(dx < 0 && detailPhotoIndex < photos.length - 1) detailPhotoIndex++;
+        if(dx > 0 && detailPhotoIndex > 0) detailPhotoIndex--;
+        swipeCont.style.transform = `translateX(-${detailPhotoIndex * 100}%)`;
+        photosEl.querySelectorAll('.photo-dots span').forEach((dot, i) => {
+          dot.classList.toggle('active', i === detailPhotoIndex);
+        });
+      }
+    }, {passive:true});
+  }
+}
+
+// 写真をインライン or 遅延取得して描画
+async function renderDetailPhotosFor(machine){
+  const photosEl = document.getElementById('detailPhotos');
+  if(machine.photos && machine.photos.length){ renderDetailPhotos(machine.photos); return; }
+  if(!machine.photoCount){ renderDetailPhotos([]); return; }
+  photosEl.innerHTML = '<div class="no-photo">⏳</div>'; // 読み込み中
+  const photos = await fetchPhotos(machine);
+  if(detailMachine !== machine) return; // 別の自販機に切り替わっていたら中断
+  renderDetailPhotos(photos);
+}
+
 function openDetail(machine){
   detailMachine = machine;
   detailPhotoIndex = 0;
 
   document.getElementById('detailTitle').textContent = machine.maker || '詳細';
 
-  // Photos
-  const photosEl = document.getElementById('detailPhotos');
-  const photos = machine.photos || [];
-  if(photos.length === 0){
-    photosEl.innerHTML = '<div class="no-photo">🥤</div>';
-  } else {
-    let slidesHtml = photos.map(p => `<div class="swipe-slide"><img src="${p}"></div>`).join('');
-    let dotsHtml = photos.length > 1
-      ? '<div class="photo-dots">' + photos.map((_, i) => `<span class="${i===0?'active':''}"></span>`).join('') + '</div>'
-      : '';
-    photosEl.innerHTML = `<div class="swipe-container" id="swipeContainer">${slidesHtml}</div>${dotsHtml}`;
-
-    // タップで全画面表示（スワイプと区別する）
-    let suppressTap = false;
-    photosEl.querySelectorAll('.swipe-slide img').forEach((imgEl, i) => {
-      imgEl.addEventListener('click', () => {
-        if(suppressTap){ suppressTap = false; return; }
-        openPhotoViewer(photos[detailPhotoIndex] || photos[i]);
-      });
-    });
-
-    if(photos.length > 1){
-      const swipeCont = document.getElementById('swipeContainer');
-      swipeCont.addEventListener('touchstart', (e) => {
-        swipeStartX = e.touches[0].clientX;
-      }, {passive:true});
-      swipeCont.addEventListener('touchend', (e) => {
-        const dx = e.changedTouches[0].clientX - swipeStartX;
-        if(Math.abs(dx) > 50){
-          suppressTap = true; // スワイプ後のクリックでビューアを開かない
-          if(dx < 0 && detailPhotoIndex < photos.length - 1) detailPhotoIndex++;
-          if(dx > 0 && detailPhotoIndex > 0) detailPhotoIndex--;
-          swipeCont.style.transform = `translateX(-${detailPhotoIndex * 100}%)`;
-          photosEl.querySelectorAll('.photo-dots span').forEach((dot, i) => {
-            dot.classList.toggle('active', i === detailPhotoIndex);
-          });
-        }
-      }, {passive:true});
-    }
-  }
+  // Photos（写真本体は必要なときだけ取得）
+  renderDetailPhotosFor(machine);
 
   // Info
   const infoEl = document.getElementById('detailInfo');
