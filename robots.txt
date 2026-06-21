@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tonyhiroshi.github.io/jihanki-map/sitemap.xml

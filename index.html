@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自販機マップ｜近くの自動販売機を探せる無料マップ（飲料・冷凍食品・ラーメン・アイス）</title>
+<meta name="description" content="自販機マップは、近くの自動販売機をすぐに探せる無料の地図サービスです。飲料はもちろん、冷凍食品・ラーメン・アイス・お肉などの自販機にも対応。価格や決済方法（現金・交通系IC・PayPay等）で絞り込み、写真つきでみんなと共有できます。">
+<meta name="keywords" content="自販機,自動販売機,自販機マップ,自販機 地図,近くの自販機,冷凍自販機,ラーメン自販機,アイス自販機,激安自販機,PayPay 自販機">
+<link rel="canonical" href="https://tonyhiroshi.github.io/jihanki-map/">
+<link rel="icon" type="image/png" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#2b3a4a">
+<!-- OGP -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="自販機マップ">
+<meta property="og:title" content="自販機マップ｜近くの自動販売機を探せる無料マップ">
+<meta property="og:description" content="近くの自販機をすぐに探せる無料の地図。飲料・冷凍食品・ラーメン・アイスにも対応。価格や決済方法で絞り込み、写真つきで共有できます。">
+<meta property="og:url" content="https://tonyhiroshi.github.io/jihanki-map/">
+<meta property="og:image" content="https://tonyhiroshi.github.io/jihanki-map/ogp.png">
+<meta property="og:locale" content="ja_JP">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://tonyhiroshi.github.io/jihanki-map/ogp.png">
+<!-- 構造化データ -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "自販機マップ",
+  "url": "https://tonyhiroshi.github.io/jihanki-map/",
+  "applicationCategory": "TravelApplication",
+  "operatingSystem": "Web, iOS, Android",
+  "inLanguage": "ja",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "JPY" },
+  "description": "近くの自動販売機をすぐに探せる無料の地図サービス。飲料・冷凍食品・ラーメン・アイス・お肉などの自販機に対応し、価格や決済方法で絞り込み、写真つきで共有できます。"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "自販機マップは無料で使えますか？", "acceptedAnswer": { "@type": "Answer", "text": "はい、完全無料でご利用いただけます。アプリのインストールも不要で、ブラウザですぐに使えます。" } },
+    { "@type": "Question", "name": "飲料以外の自販機も探せますか？", "acceptedAnswer": { "@type": "Answer", "text": "はい。飲料に加えて、冷凍食品・ラーメン・アイス・お肉・お菓子などの自販機にも対応しています。種類で絞り込んで探せます。" } },
+    { "@type": "Question", "name": "決済方法で絞り込めますか？", "acceptedAnswer": { "@type": "Answer", "text": "現金・交通系IC・QRコード決済・クレジット・電子マネーなど、対応している決済方法で絞り込んで自販機を探せます。" } },
+    { "@type": "Question", "name": "自分で自販機を登録できますか？", "acceptedAnswer": { "@type": "Answer", "text": "はい。地図上で位置を選び、写真を撮って情報を入力するだけで誰でも登録できます。みんなで作る自販機マップです。" } }
+  ]
+}
+</script>
+<style>
+  :root{ --ink:#10151c; --paper:#f3efe4; --steel:#2b3a4a; --steel-deep:#1a2530; --coin:#d4a13a; --neon:#ff5a3c; --ok:#3aa66b; --line:#c9c2ac; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Segoe UI',-apple-system,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;line-height:1.8;}
+  a{color:var(--steel);}
+  .hero{background:linear-gradient(180deg,var(--steel),var(--steel-deep));color:#fff;text-align:center;padding:56px 20px 48px;}
+  .hero img.logo{width:96px;height:96px;border-radius:22px;}
+  .hero h1{font-size:30px;margin:18px 0 8px;}
+  .hero p{font-size:16px;color:#ffd980;margin:0 0 26px;}
+  .cta{display:inline-block;background:var(--neon);color:#fff;text-decoration:none;font-weight:800;font-size:17px;padding:15px 34px;border-radius:14px;box-shadow:0 6px 20px rgba(255,90,60,.4);}
+  main{max-width:820px;margin:0 auto;padding:8px 20px 40px;}
+  section{margin:40px 0;}
+  h2{font-size:22px;border-left:5px solid var(--neon);padding-left:12px;}
+  h3{font-size:17px;margin-bottom:4px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;}
+  .card .ic{font-size:26px;}
+  .cats{display:flex;flex-wrap:wrap;gap:8px;}
+  .cat{background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:700;font-size:14px;}
+  ol.steps{padding-left:22px;}
+  ol.steps li{margin-bottom:8px;}
+  .faq dt{font-weight:800;margin-top:16px;}
+  .faq dd{margin:4px 0 0;color:#444;}
+  .midcta{text-align:center;margin:34px 0;}
+  footer{background:var(--steel-deep);color:#cfd6dd;text-align:center;padding:26px 20px;font-size:13px;}
+  footer a{color:#ffd980;text-decoration:none;margin:0 8px;}
+</style>
+</head>
+<body>
+<header class="hero">
+  <img class="logo" src="icon-192.png" alt="自販機マップのアプリアイコン">
+  <h1>自販機マップ</h1>
+  <p>近くの自動販売機を、すぐに探せる無料マップ</p>
+  <a class="cta" href="vending-map.html">アプリを開く（無料）</a>
+</header>
+
+<main>
+  <section>
+    <h2>自販機マップとは？</h2>
+    <p><strong>自販機マップ</strong>は、近くにある<strong>自動販売機</strong>を地図上ですぐに見つけられる無料サービスです。インストール不要で、スマホのブラウザからそのまま使えます。みんなで自販機の情報を登録・更新していく、コミュニティ型の自販機データベースです。</p>
+    <p>のどが渇いたとき、急に飲み物が欲しいとき、近くの自販機がどこにあるか分からず困った経験はありませんか？ 自販機マップなら、現在地のまわりにある自販機を地図とリストで一覧でき、写真つきで何が売っているかも事前に分かります。</p>
+  </section>
+
+  <section>
+    <h2>こんな自販機にも対応</h2>
+    <p>最近の自販機は飲み物だけではありません。自販機マップは<strong>飲料以外の自販機</strong>も種類別に探せます。</p>
+    <div class="cats">
+      <span class="cat">🥤 飲料</span>
+      <span class="cat">🍦 アイス</span>
+      <span class="cat">❄️ 冷凍食品</span>
+      <span class="cat">🍜 ラーメン・麺</span>
+      <span class="cat">🍖 お肉</span>
+      <span class="cat">🍞 お菓子・パン</span>
+      <span class="cat">🧸 その他物販</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>主な特徴</h2>
+    <div class="cards">
+      <div class="card"><div class="ic">📍</div><h3>近くの自販機をすぐ表示</h3><p>現在地を取得して、近い順にリストと地図で表示します。</p></div>
+      <div class="card"><div class="ic">🔍</div><h3>条件で絞り込み</h3><p>種類・価格・決済方法（現金／交通系IC／PayPay等）で絞り込めます。</p></div>
+      <div class="card"><div class="ic">📷</div><h3>写真つきで分かる</h3><p>商品ラインナップや目玉商品を写真つきで確認できます。</p></div>
+      <div class="card"><div class="ic">🧭</div><h3>その場まで道案内</h3><p>選んだ自販機まで、現在地から徒歩ルートを表示します。</p></div>
+      <div class="card"><div class="ic">✏️</div><h3>みんなで更新</h3><p>誰でも情報を登録・編集でき、常に新しい状態に保てます。</p></div>
+      <div class="card"><div class="ic">📱</div><h3>アプリのように使える</h3><p>ホーム画面に追加すれば全画面アプリとして起動できます。</p></div>
+    </div>
+  </section>
+
+  <div class="midcta"><a class="cta" href="vending-map.html">今すぐ近くの自販機を探す</a></div>
+
+  <section>
+    <h2>使い方は3ステップ</h2>
+    <ol class="steps">
+      <li><strong>アプリを開く</strong>：現在地のまわりの自販機が一覧で表示されます。</li>
+      <li><strong>探す・絞り込む</strong>：種類や決済方法で絞り込み、気になる自販機をタップ。</li>
+      <li><strong>行く・登録する</strong>：道案内で向かう、または新しい自販機を登録して仲間に共有。</li>
+    </ol>
+  </section>
+
+  <section class="faq">
+    <h2>よくある質問</h2>
+    <dl>
+      <dt>自販機マップは無料で使えますか？</dt>
+      <dd>はい、完全無料です。インストールも不要で、ブラウザですぐに使えます。</dd>
+      <dt>飲料以外の自販機も探せますか？</dt>
+      <dd>はい。冷凍食品・ラーメン・アイス・お肉・お菓子などの自販機にも対応し、種類で絞り込めます。</dd>
+      <dt>決済方法で絞り込めますか？</dt>
+      <dd>現金・交通系IC・QRコード決済・クレジット・電子マネーなど、対応決済で絞り込めます。</dd>
+      <dt>自分で自販機を登録できますか？</dt>
+      <dd>はい。地図で位置を選び、写真を撮って情報を入力するだけで、誰でも登録できます。</dd>
+    </dl>
+  </section>
+
+  <div class="midcta"><a class="cta" href="vending-map.html">アプリを開く（無料）</a></div>
+</main>
+
+<footer>
+  <div>自販機マップ — みんなで作るご近所の自販機データベース</div>
+  <div style="margin-top:10px;">
+    <a href="vending-map.html">アプリを開く</a>・
+    <a href="privacy.html">プライバシーポリシー</a>・
+    <a href="terms.html">利用規約</a>
+  </div>
+</footer>
+</body>
+</html>
