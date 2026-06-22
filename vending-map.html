@@ -155,6 +155,18 @@
     transition:box-shadow .15s;
   }
   .vm-card:active{box-shadow:0 2px 12px rgba(0,0,0,.12);}
+  /* 自分が登録した自販機を一目で分かるよう強調 */
+  .vm-card.own{
+    border-color:#d4a13a;
+    box-shadow:0 2px 10px rgba(212,161,58,.22);
+    background:linear-gradient(0deg, rgba(212,161,58,.07), rgba(212,161,58,.07)), #fff;
+  }
+  .vm-card-own-badge{
+    align-self:flex-start;display:inline-flex;align-items:center;gap:3px;
+    font-size:10px;font-weight:800;color:#8a6300;letter-spacing:.2px;
+    background:#fbe7c2;border:1px solid #e7c878;border-radius:999px;
+    padding:1px 8px;margin-bottom:4px;
+  }
   .vm-card-photo{
     width:72px;height:72px;border-radius:10px;overflow:hidden;flex-shrink:0;
     background:var(--soft);display:flex;align-items:center;justify-content:center;
@@ -918,6 +930,8 @@ function initFirebase(){
       currentUid = u ? u.uid : null;
       // 所有者判定が変わるので、開いている詳細を更新
       if(detailMachine) updateDetailActions(detailMachine);
+      // 「自分の登録」バッジ／地図のゴールド表示を反映
+      renderCardList();
     });
     auth.signInAnonymously().catch(e => {
       console.warn('匿名ログインに失敗（Authenticationの匿名ログインが未有効の可能性）:', e.code || e);
@@ -1572,10 +1586,13 @@ function renderCardList(){
     const distText = m._dist !== null ? formatDistance(m._dist) : '';
     const productsText = (m.products && m.products.length) ? m.products.join('・') : '';
     const featureHtml = buildFeatureHtml(m);
+    const own = isOwnMachine(m);
+    const ownBadge = own ? '<span class="vm-card-own-badge">⭐ 自分の登録</span>' : '';
     return `
-      <div class="vm-card" data-id="${m.id}">
+      <div class="vm-card${own ? ' own' : ''}" data-id="${m.id}">
         <div class="vm-card-photo">${photoHtml}</div>
         <div class="vm-card-info">
+          ${ownBadge}
           <div class="vm-card-maker">${machineTitle(m)}</div>
           ${distText ? `<div class="vm-card-dist">${distText}</div>` : ''}
           ${featureHtml}
@@ -3021,7 +3038,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // アイコンを開き直せば必ず最新版になる。
 // ※リリースごとに APP_VERSION と version.json を更新すること（bump-version.ps1）
 // ============================================================
-const APP_VERSION = '2026.06.23.1';
+const APP_VERSION = '2026.06.23.2';
 let _lastUpdateCheck = 0;
 
 async function checkForUpdate(reg){
