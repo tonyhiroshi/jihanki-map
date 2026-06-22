@@ -18,6 +18,11 @@ service cloud.firestore {
       allow update: if request.auth != null
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['category','maker','products','pays','feature','price','note','updatedAt','lastEditUid','thumb','photoCount']);
+      // ピンの位置（lat/lng）の修正は投稿者本人のみ。所有者・作成日時は変更不可。
+      allow update: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['lat','lng','updatedAt']);
       // 削除は投稿者本人のみ
       allow delete: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid;

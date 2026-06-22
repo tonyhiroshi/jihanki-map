@@ -252,6 +252,7 @@
   }
   .btn-navigate{background:var(--ok);color:#fff;}
   .btn-edit{background:var(--steel);color:#fff;}
+  .btn-move{background:var(--ok);color:#fff;opacity:.82;}
   .btn-delete{background:var(--neon);color:#fff;}
   .btn-report{background:#fff;color:#8a6c1e;border:1px solid var(--line) !important;}
   .btn-close-detail{background:var(--soft);color:#4a4233;}
@@ -588,6 +589,7 @@
   <div class="detail-actions">
     <button class="btn-navigate" id="detailNavBtn">ここへ行く</button>
     <button class="btn-edit" id="detailEditBtn">編集</button>
+    <button class="btn-move" id="detailMoveBtn">位置修正</button>
     <button class="btn-delete" id="detailDeleteBtn">削除</button>
     <button class="btn-report" id="detailReportBtn">通報</button>
     <button class="btn-close-detail" id="detailCloseBtn2">閉じる</button>
@@ -831,6 +833,7 @@ let regUserMarker = null;
 let regStep = 1;
 let regCategory = 'drink';    // 登録中の種類
 let isEditMode = false;       // 既存自販機の情報編集モード
+let isPosEditMode = false;    // ピンの位置だけを修正するモード（投稿者本人のみ）
 let editingMachineId = null;
 
 // Navigation state
@@ -1029,6 +1032,17 @@ async function updateMachine(id, fields, photos){
     await db.collection('photos').doc(id).delete().catch(()=>{});
   }
   delete photoCache[id]; // キャッシュを無効化して次回再取得
+}
+
+// ピンの位置だけを更新（投稿者本人のみ）。情報・写真は変更しない。
+async function updateMachinePosition(id, lat, lng){
+  if(useLocal){
+    const m = machines.find(x => x.id === id);
+    if(m){ m.lat = lat; m.lng = lng; m.updatedAt = Date.now(); saveLocal(machines); renderCardList(); }
+    return;
+  }
+  if(!db) return;
+  await db.collection('machines').doc(id).update({ lat, lng, updatedAt: Date.now() });
 }
 
 async function deleteMachine(id){
@@ -1768,16 +1782,19 @@ function openDetail(machine){
 function updateDetailActions(machine){
   const delBtn = document.getElementById('detailDeleteBtn');
   const repBtn = document.getElementById('detailReportBtn');
+  const moveBtn = document.getElementById('detailMoveBtn');
   if(useLocal){
-    // ローカルモードは自分専用：削除可・通報不要
+    // ローカルモードは自分専用：削除・位置修正可・通報不要
     delBtn.style.display = '';
     repBtn.style.display = 'none';
+    moveBtn.style.display = '';
     return;
   }
   const isOwner = !!machine.ownerUid && machine.ownerUid === currentUid;
-  // 旧データ（ownerUid無し）は誰の投稿か不明 → 削除は出さず通報のみ
+  // 旧データ（ownerUid無し）は誰の投稿か不明 → 削除・位置修正は出さず通報のみ
   delBtn.style.display = isOwner ? '' : 'none';
   repBtn.style.display = isOwner ? 'none' : '';
+  moveBtn.style.display = isOwner ? '' : 'none';
 }
 
 function closeDetail(){
@@ -1961,6 +1978,61 @@ async function startEdit(machine){
   }catch(e){ /* 写真取得失敗時は0枚から */ }
 }
 
+document.getElementById('detailMoveBtn').addEventListener('click', () => {
+  if(!detailMachine) return;
+  startMovePin(detailMachine);
+});
+
+// ピンの位置を修正（投稿者本人のみ）。登録画面の地図ステップだけを再利用する。
+function startMovePin(machine){
+  isPosEditMode = true;
+  isEditMode = false;
+  editingMachineId = machine.id;
+  regLatLng = null;
+
+  // 位置のみ修正するUI（ステップ表示は隠し、地図のみ表示）
+  document.getElementById('regTitle').textContent = 'ピンの位置を修正';
+  document.getElementById('regSteps').style.display = 'none';
+  document.getElementById('regMapNextBtn').textContent = 'この位置で保存';
+
+  closeDetail();
+  showScreen('regScreen');
+  showRegStep(1);
+
+  // 地図を用意して既存位置にピンを立てる（登録と同じ仕組みを共用）
+  if(!regMap){
+    regMap = L.map('regMap', {zoomControl:true, maxZoom:19}).setView([machine.lat, machine.lng], 18);
+    addTileLayer(regMap, 0);
+    regMap.on('click', (e) => { setRegPin(e.latlng.lat, e.latlng.lng); });
+  } else {
+    regMap.setView([machine.lat, machine.lng], 18);
+    if(regUserMarker){ regMap.removeLayer(regUserMarker); regUserMarker = null; }
+  }
+  setRegPin(machine.lat, machine.lng);   // 既存位置にピン（保存ボタンも有効化される）
+  if(userLat !== null) showRegUserLocation();
+  setTimeout(()=>{ try{ regMap.invalidateSize(); }catch(e){} }, 150);
+}
+
+// 修正したピン位置を保存する
+async function savePinPosition(){
+  if(!isPosEditMode || !editingMachineId || !regLatLng) return;
+  const btn = document.getElementById('regMapNextBtn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try{
+    await updateMachinePosition(editingMachineId, regLatLng.lat, regLatLng.lng);
+    logEv('move_machine', {});
+    isPosEditMode = false; editingMachineId = null;
+    showScreen('homeScreen');
+    renderCardList();
+    showSuccess('位置を修正しました！', 'ピンの位置をみんなに反映しました');
+  }catch(e){
+    console.error(e);
+    showToast('位置の更新に失敗: ' + (e.code || e.message || e));
+  }finally{
+    btn.disabled = false; btn.textContent = 'この位置で保存';
+  }
+}
+
 document.getElementById('detailReportBtn').addEventListener('click', async () => {
   if(!detailMachine || !db) return;
   if(!confirm('この投稿を運営に通報しますか？\n（不適切な写真・誤った情報・いたずら等）')) return;
@@ -2132,11 +2204,13 @@ function startRegistration(){
   regCategory = 'drink';
   regStep = 1;
 
+  isPosEditMode = false;
   // 編集モードからのUIを通常登録に戻す
   document.getElementById('regTitle').textContent = '自販機を登録';
   document.getElementById('regSteps').style.display = '';
   document.getElementById('regSaveBtn').textContent = '保存する';
   document.getElementById('regFormBackBtn').textContent = '戻る';
+  document.getElementById('regMapNextBtn').textContent = '次へ';
 
   // テキスト入力をリセット
   ['regSearchInput','regFeatureInput','regPriceInput','regNoteInput'].forEach(id => {
@@ -2199,6 +2273,7 @@ function setRegPin(lat, lng){
   regLatLng = L.latLng(lat, lng);
   if(regMarker) regMap.removeLayer(regMarker);
   regMarker = L.marker([lat, lng], {
+    draggable: true,   // ピンをドラッグして微調整できる
     icon: L.divIcon({
       className: '',
       html: '<div style="width:20px;height:20px;background:var(--ok,#3aa66b);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4);"></div>',
@@ -2206,6 +2281,12 @@ function setRegPin(lat, lng){
       iconAnchor: [10,10]
     })
   }).addTo(regMap);
+  // ドラッグ終了で座標を更新
+  regMarker.on('dragend', () => {
+    const p = regMarker.getLatLng();
+    regLatLng = L.latLng(p.lat, p.lng);
+    document.getElementById('regCoordText').textContent = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
+  });
   document.getElementById('regCoordText').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   document.getElementById('regMapNextBtn').disabled = false;
 }
@@ -2485,6 +2566,11 @@ document.getElementById('regSearchInput').addEventListener('keydown', (e) => {
 });
 
 document.getElementById('regBackBtn').addEventListener('click', () => {
+  if(isPosEditMode){
+    isPosEditMode = false; editingMachineId = null;
+    showScreen('homeScreen');
+    return;
+  }
   if(isEditMode){
     if(regStep === 3){
       showRegStep(2); // 情報→写真へ戻る
@@ -2507,6 +2593,7 @@ document.getElementById('regMapNextBtn').addEventListener('click', () => {
     showToast("位置を地図上でタップしてください");
     return;
   }
+  if(isPosEditMode){ savePinPosition(); return; }
   showRegStep(2);
 });
 
@@ -2934,7 +3021,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // アイコンを開き直せば必ず最新版になる。
 // ※リリースごとに APP_VERSION と version.json を更新すること（bump-version.ps1）
 // ============================================================
-const APP_VERSION = '2026.06.22.3';
+const APP_VERSION = '2026.06.23.1';
 let _lastUpdateCheck = 0;
 
 async function checkForUpdate(reg){

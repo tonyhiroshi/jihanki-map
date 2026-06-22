@@ -52,35 +52,77 @@ const firebaseConfig = {
 一定期間後に「誰も読み書きできない」状態に自動的に切り替わり、かつ
 途中までは完全に無防備な状態です。最低限、以下のように差し替えてください。
 
-Firebaseコンソール → Firestore Database →「ルール」タブ：
+**このリポジトリの [`firestore.rules`](firestore.rules) が正本です。** 内容を変更したら
+忘れずに公開してください（下記いずれか）。
+
+- Firebaseコンソール → Firestore Database →「ルール」タブに貼り付けて「公開」
+- もしくは Firebase CLI: `firebase deploy --only firestore:rules`
+
+現在のルール（`firestore.rules` と同一）：
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /machines/{machineId} {
-      // 誰でも読める（マップ検索アプリなので一般公開でOKという前提）
-      allow read: if true;
 
-      // 書き込み（登録・更新）は許可するが、変な内容を弾くチェックを入れる
-      allow create: if request.resource.data.maker is string
+    // 自販機（メタ情報＋サムネイル）
+    match /machines/{id} {
+      // 誰でも閲覧可（公開マップのため）
+      allow read: if true;
+      // 作成はログイン必須＋自分のIDを記録＋最低限の型チェック
+      allow create: if request.auth != null
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.maker is string
                     && request.resource.data.lat is number
                     && request.resource.data.lng is number;
+      // 情報・写真の更新はログインしていれば誰でも可（鮮度維持）。
+      // 変更できるのは下記のキーのみ。位置・所有者・作成日時は変更不可
+      // （許可リスト外のキーが含まれると拒否されるため、自動的に保護される）。
+      allow update: if request.auth != null
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['category','maker','products','pays','feature','price','note','updatedAt','lastEditUid','thumb','photoCount']);
+      // ピンの位置（lat/lng）の修正は投稿者本人のみ。所有者・作成日時は変更不可。
+      allow update: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['lat','lng','updatedAt']);
+      // 削除は投稿者本人のみ
+      allow delete: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid;
+    }
 
-      allow update: if request.resource.data.maker is string;
+    // 写真本体（詳細表示時に読み込む）。
+    // 編集機能で誰でも差し替えられるよう、ログインユーザーは書き込み可。
+    match /photos/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
 
-      // 削除は今回未実装。許可したい場合のみ有効化
-      allow delete: if false;
+    // 通報（作成のみ許可。閲覧・編集・削除は管理者がコンソールで行う）
+    match /reports/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+
+    // 貢献ランキング用のユーザー情報
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && (!('nickname' in request.resource.data) || request.resource.data.nickname is string);
     }
   }
 }
 ```
 
-これは最低限の「型チェック」レベルのルールです。荒らし対策（投稿頻度制限・
-内容モデレーションなど）まで考えるなら、Firebase Authenticationで匿名ログインを
-必須にし、`request.auth != null` を条件に加える、Cloud Functionsで投稿内容を
-チェックする、といった対策が次のステップになります。必要であればこちらも
-一緒に組みます。
+ポイント：
+- **匿名ログイン必須**（`request.auth != null`）。Firebase Authentication で「匿名」を
+  有効化しておく必要があります。アプリ起動時に自動で匿名サインインします。
+- **削除・ピン位置の修正は投稿者本人のみ**（`ownerUid == request.auth.uid`）。
+- **情報・写真の更新は誰でも可**（鮮度維持のため）。ただし変更できるキーを許可リストで
+  限定し、位置・所有者・作成日時は本人以外から変更できないようにしています。
+- さらなる荒らし対策（投稿頻度制限・内容モデレーション）まで考えるなら、Cloud Functions で
+  投稿内容をチェックするのが次のステップです。必要であれば一緒に組みます。
 
 ## 6. 既知の制約・次の検討事項
 - 写真はBase64文字列としてFirestoreの1ドキュメント内に保存しています。
