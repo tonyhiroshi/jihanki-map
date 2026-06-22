@@ -526,6 +526,8 @@
   .rank-tabs{display:flex;border-bottom:1px solid var(--line);}
   .rank-tab{flex:1;background:none;border:none;padding:12px;font-size:14px;font-weight:700;color:#999;cursor:pointer;border-bottom:3px solid transparent;}
   .rank-tab.active{color:var(--steel);border-bottom-color:var(--coin);}
+  .rank-tabs-type{background:var(--soft);}
+  .rank-tabs-type .rank-tab{font-size:13px;padding:10px;}
   .rank-list{flex:1;overflow-y:auto;padding:6px 0 20px;-webkit-overflow-scrolling:touch;}
   .rank-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid rgba(0,0,0,.06);}
   .rank-row.me{background:rgba(212,161,58,.14);}
@@ -726,6 +728,10 @@
     <div class="rank-tabs">
       <button class="rank-tab active" id="rankTabWeek" data-period="week">今週</button>
       <button class="rank-tab" id="rankTabAll" data-period="all">累計</button>
+    </div>
+    <div class="rank-tabs rank-tabs-type">
+      <button class="rank-tab active" id="rankTabReg" data-type="register">📍 登録</button>
+      <button class="rank-tab" id="rankTabEdit" data-type="edit">✏️ 更新</button>
     </div>
     <div class="rank-list" id="rankList"></div>
   </div>
@@ -2934,6 +2940,8 @@ async function recordContribution(type){
         edits: (d.edits||0) + (type==='edit'?1:0),
         weekId: wk,
         weekPoints: (sameWeek ? (d.weekPoints||0) : 0) + 1,
+        weekRegistrations: (sameWeek ? (d.weekRegistrations||0) : 0) + (type==='register'?1:0),
+        weekEdits: (sameWeek ? (d.weekEdits||0) : 0) + (type==='edit'?1:0),
         nickname: myNickname(),
         updatedAt: Date.now()
       }, { merge: true });
@@ -2942,6 +2950,7 @@ async function recordContribution(type){
 }
 
 let rankPeriod = 'week';
+let rankType = 'register';
 async function renderRanking(){
   const listEl = document.getElementById('rankList');
   const youEl = document.getElementById('rankYou');
@@ -2956,18 +2965,23 @@ async function renderRanking(){
   listEl.innerHTML = '<div class="rank-empty">読み込み中...</div>';
   try{
     let users = [];
+    // 期間（今週/累計）× 種別（登録/更新）で集計フィールドを切り替える
+    const field = (rankPeriod === 'all')
+      ? (rankType === 'register' ? 'registrations' : 'edits')
+      : (rankType === 'register' ? 'weekRegistrations' : 'weekEdits');
     if(rankPeriod === 'all'){
-      const s = await db.collection('users').orderBy('total','desc').limit(20).get();
-      users = s.docs.map(d=>({id:d.id, ...d.data(), _pt:(d.data().total||0)})).filter(u=>u._pt>0);
+      const s = await db.collection('users').orderBy(field,'desc').limit(20).get();
+      users = s.docs.map(d=>({id:d.id, ...d.data(), _pt:(d.data()[field]||0)})).filter(u=>u._pt>0);
     } else {
       const wk = currentWeekId();
-      const s = await db.collection('users').orderBy('weekPoints','desc').limit(50).get();
+      const s = await db.collection('users').orderBy(field,'desc').limit(50).get();
       users = s.docs.map(d=>({id:d.id, ...d.data()}))
-        .filter(u => u.weekId === wk && (u.weekPoints||0) > 0)
-        .slice(0,20).map(u=>({...u, _pt:(u.weekPoints||0)}));
+        .filter(u => u.weekId === wk && (u[field]||0) > 0)
+        .slice(0,20).map(u=>({...u, _pt:(u[field]||0)}));
     }
     if(!users.length){
-      listEl.innerHTML = '<div class="rank-empty">まだ記録がありません。<br>自販機を登録・更新してランキングに参加しよう！</div>';
+      const act = (rankType === 'register') ? '自販機を登録' : '情報を更新';
+      listEl.innerHTML = '<div class="rank-empty">まだ記録がありません。<br>' + act + 'してランキングに参加しよう！</div>';
       return;
     }
     listEl.innerHTML = users.map((u,i)=>{
@@ -2999,8 +3013,19 @@ function editNickname(){
 }
 document.getElementById('rankCloseBtn').addEventListener('click', () => document.getElementById('rankOverlay').classList.remove('show'));
 document.getElementById('rankOverlay').addEventListener('click', (e) => { if(e.target.id==='rankOverlay') e.currentTarget.classList.remove('show'); });
-document.getElementById('rankTabWeek').addEventListener('click', () => { rankPeriod='week'; document.getElementById('rankTabWeek').classList.add('active'); document.getElementById('rankTabAll').classList.remove('active'); renderRanking(); });
-document.getElementById('rankTabAll').addEventListener('click', () => { rankPeriod='all'; document.getElementById('rankTabAll').classList.add('active'); document.getElementById('rankTabWeek').classList.remove('active'); renderRanking(); });
+function setRankTab(period, type){
+  if(period) rankPeriod = period;
+  if(type) rankType = type;
+  document.getElementById('rankTabWeek').classList.toggle('active', rankPeriod === 'week');
+  document.getElementById('rankTabAll').classList.toggle('active', rankPeriod === 'all');
+  document.getElementById('rankTabReg').classList.toggle('active', rankType === 'register');
+  document.getElementById('rankTabEdit').classList.toggle('active', rankType === 'edit');
+  renderRanking();
+}
+document.getElementById('rankTabWeek').addEventListener('click', () => setRankTab('week', null));
+document.getElementById('rankTabAll').addEventListener('click', () => setRankTab('all', null));
+document.getElementById('rankTabReg').addEventListener('click', () => setRankTab(null, 'register'));
+document.getElementById('rankTabEdit').addEventListener('click', () => setRankTab(null, 'edit'));
 document.getElementById('rankBar').addEventListener('click', openRanking);
 document.getElementById('rankBar').style.cursor = 'pointer';
 
@@ -3043,7 +3068,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // アイコンを開き直せば必ず最新版になる。
 // ※リリースごとに APP_VERSION と version.json を更新すること（bump-version.ps1）
 // ============================================================
-const APP_VERSION = '2026.06.23.3';
+const APP_VERSION = '2026.06.23.4';
 let _lastUpdateCheck = 0;
 
 async function checkForUpdate(reg){
